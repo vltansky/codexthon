@@ -6,7 +6,7 @@ import { MentorDashboard } from "./MentorDashboard";
 import { internalLinkHandler } from "./navigation";
 import { participantAnalytics } from "./participantAnalytics";
 import { defaultPromoInstructions } from "./promo-instructions";
-import type { AppUser, PortalData } from "./types";
+import type { PortalData } from "./types";
 import { unwrapBase44FunctionResponse } from "../src/base44-response";
 import { buildAgentConnectPrompt, buildManualInstallSteps, maskEventKey } from "../src/agent-connect-prompt";
 import { buildCategories } from "../src/build-categories";
@@ -48,7 +48,7 @@ function formatQuestionAnswer(answer: string) {
   });
 }
 
-export function ParticipantDashboard({ user, accessToken, onExit, preview = false }: { user?: AppUser; accessToken?: string; onExit?: () => void; preview?: boolean }) {
+export function ParticipantDashboard({ accessToken, onExit, preview = false }: { accessToken?: string; onExit?: () => void; preview?: boolean }) {
   const [data, setData] = useState<PortalData | null>(null);
   const [error, setError] = useState("");
   const [copiedPromo, setCopiedPromo] = useState<"codex" | "api" | "base44" | null>(null);

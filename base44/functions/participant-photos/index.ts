@@ -2,7 +2,7 @@ import { createClientFromRequest } from "npm:@base44/sdk";
 
 import { verifyAccessToken } from "./access-link.ts";
 import { toPhotoFunctionError } from "./errors.ts";
-import { downloadParticipantPhotosZip, exportParticipantPhotosFolder, listParticipantPhotos, saveParticipantPhotoSelection } from "./service.ts";
+import { exportParticipantPhotosFolder, listParticipantPhotos, saveParticipantPhotoSelection } from "./service.ts";
 
 const securityHeaders = { "Cache-Control": "no-store", "Referrer-Policy": "no-referrer" };
 
@@ -32,15 +32,6 @@ Deno.serve(async (request) => {
         await exportParticipantPhotosFolder(base44, participant),
         { headers: securityHeaders },
       );
-    }
-    if (body.action === "download") {
-      return new Response(await downloadParticipantPhotosZip(base44, participant), {
-        headers: {
-          ...securityHeaders,
-          "Content-Type": "application/zip",
-          "Content-Disposition": 'attachment; filename="build-week-photos.zip"',
-        },
-      });
     }
     return Response.json(
       await listParticipantPhotos(base44, participant, body),

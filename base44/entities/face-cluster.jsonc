@@ -1,0 +1,21 @@
+{
+  "name": "FaceCluster",
+  "description": "One person group in the photo gallery: aggregate of matching faces across photos with a cover face for the people grid",
+  "type": "object",
+  "properties": {
+    "cluster_key": { "type": "string" },
+    "face_count": { "type": "number" },
+    "photo_ids": { "type": "array", "items": { "type": "string" } },
+    "cover_photo_id": { "type": "string" },
+    "cover_box": { "type": "array", "items": { "type": "number" } },
+    "cover_score": { "type": "number" },
+    "hidden": { "type": "boolean" }
+  },
+  "required": ["cluster_key"],
+  "rls": {
+    "create": { "user_condition": { "role": "admin" } },
+    "read": { "user_condition": { "role": "admin" } },
+    "update": { "user_condition": { "role": "admin" } },
+    "delete": { "user_condition": { "role": "admin" } }
+  }
+}

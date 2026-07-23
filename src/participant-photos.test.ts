@@ -19,7 +19,6 @@ interface ServiceModule {
     sourceFolderLink: string;
   }>;
   saveParticipantPhotoSelection(base44: unknown, participant: unknown, selection: unknown, fetcher: typeof fetch): Promise<{ selectedPhotoIds: string[] }>;
-  downloadParticipantPhotosZip(base44: unknown, participant: unknown, fetcher: typeof fetch): Promise<ReadableStream<Uint8Array>>;
   exportParticipantPhotosFolder(base44: unknown, participant: unknown, fetcher: typeof fetch): Promise<{ folderLink: string; photoCount: number }>;
 }
 
@@ -270,65 +269,4 @@ test("rejects additions that do not live in the event folder", async () => {
     /event folder/i,
   );
   assert.deepEqual(updates, []);
-});
-
-test("streams the stored selection as a zip archive in original quality", async () => {
-  const { downloadParticipantPhotosZip } = await import(serviceModuleUrl) as ServiceModule;
-  const fetcher = (async (input: RequestInfo | URL) => {
-    const url = String(input);
-    if (url.includes("alt=media")) {
-      const photoId = /files\/(photo-\d+)\?/.exec(url)?.[1] ?? "";
-      return new Response(`original-bytes-of-${photoId}`);
-    }
-    return Response.json({ files: [driveFile(1), driveFile(2), driveFile(3)] });
-  }) as typeof fetch;
-
-  const stream = await downloadParticipantPhotosZip(
-    fakeBase44(),
-    { id: "participant-1", selected_photo_ids: ["photo-1", "photo-3"] },
-    fetcher,
-  );
-  const bytes = new Uint8Array(await new Response(stream).arrayBuffer());
-  const text = new TextDecoder("latin1").decode(bytes);
-
-  assert.deepEqual([...bytes.slice(0, 4)], [0x50, 0x4b, 0x03, 0x04]);
-  assert.match(text, /Photo 1\.jpg/);
-  assert.match(text, /Photo 3\.jpg/);
-  assert.doesNotMatch(text, /Photo 2\.jpg/);
-  assert.match(text, /original-bytes-of-photo-1/);
-  assert.match(text, /original-bytes-of-photo-3/);
-  const endRecordIndex = text.lastIndexOf("PK");
-  assert.ok(endRecordIndex > 0);
-  assert.equal(bytes[endRecordIndex + 10], 2);
-});
-
-test("lists photos that failed to download in a MISSING.txt manifest instead of silently truncating", async () => {
-  const { downloadParticipantPhotosZip } = await import(serviceModuleUrl) as ServiceModule;
-  const fetcher = (async (input: RequestInfo | URL) => {
-    const url = String(input);
-    if (url.includes("alt=media")) {
-      if (url.includes("photo-1")) return new Response(null, { status: 500 });
-      return new Response("original-bytes-of-photo-3");
-    }
-    return Response.json({ files: [driveFile(1), driveFile(3)] });
-  }) as typeof fetch;
-
-  const stream = await downloadParticipantPhotosZip(
-    fakeBase44(),
-    { id: "participant-1", selected_photo_ids: ["photo-1", "photo-3"] },
-    fetcher,
-  );
-  const text = new TextDecoder("latin1").decode(await new Response(stream).arrayBuffer());
-
-  assert.match(text, /original-bytes-of-photo-3/);
-  assert.match(text, /MISSING\.txt/);
-  assert.match(text, /Photo 1\.jpg/);
-});
-
-test("refuses to build an empty archive", async () => {
-  const { downloadParticipantPhotosZip } = await import(serviceModuleUrl) as ServiceModule;
-  await assert.rejects(
-    downloadParticipantPhotosZip(fakeBase44(), { id: "participant-1", selected_photo_ids: [] }, listFetcher(3)),
-    /No photos selected/,
-  );
 });

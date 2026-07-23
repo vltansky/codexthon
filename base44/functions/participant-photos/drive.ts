@@ -150,19 +150,6 @@ export async function isDrivePhotoInEventFolder(
     (file.parents ?? []).some((parentId) => allowedParentIds.has(parentId));
 }
 
-export async function downloadDrivePhoto(
-  accessToken: string,
-  photoId: string,
-  fetcher: typeof fetch = fetch,
-): Promise<AsyncIterable<Uint8Array> | null> {
-  if (!photoIdPattern.test(photoId)) return null;
-  const response = await fetcher(`https://www.googleapis.com/drive/v3/files/${photoId}?alt=media`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
-  if (!response.ok || !response.body) return null;
-  return response.body as unknown as AsyncIterable<Uint8Array>;
-}
-
 export interface DriveFolder {
   id: string;
   link: string;

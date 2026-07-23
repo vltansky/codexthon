@@ -1,14 +1,38 @@
 # Codexthon
 
-A self-hosted event operations portal for participant check-in, team coordination, promo distribution, judging assignments, Google Drive photo synchronization, privacy-conscious analytics, email invitations, and MCP access.
+A deploy-your-own event operations portal for participant check-in, team coordination, promo distribution, judging assignments, Google Drive photo synchronization, privacy-conscious analytics, email invitations, and MCP access.
 
-The full application runs in your own Base44 app. Participant data and backend secrets stay in that workspace, while Gmail and Drive use Google accounts you authorize. This repository contains only the application code, schemas, and synthetic fixtures.
+The easiest deployment path uses [Base44 Backend](https://base44.com/backend) for the database, authentication, server functions, integrations, and hosting. Participant data and backend secrets stay in your Base44 workspace, while Gmail and Drive use Google accounts you authorize. This repository contains only the application code, schemas, and synthetic fixtures.
 
-## What self-hosting means
+## See it in action
 
-This project uses Base44 as its managed backend and hosting platform. Self-hosting creates a separate Base44 app under your account rather than deploying the full stack to a standalone server.
+These screenshots use synthetic `.test` addresses and demo values.
 
-Your deployment includes:
+### Participant portal
+
+Participants see their check-in state, team progress, event details, and credits in one personal portal.
+
+![Participant portal with synthetic event data](docs/screenshots/participant-portal.webp)
+
+### Admin dashboard
+
+Operators can track arrivals and portal activity, import event data, manage credits, and deliver personal links.
+
+![Admin dashboard with synthetic event data](docs/screenshots/admin-dashboard.webp)
+
+### Invitation email
+
+Checked-in participants receive a branded personal link. Gmail is the default Base44 connector; a ChatGPT Sites migration can use Resend.
+
+![Invitation email preview with a synthetic recipient](docs/screenshots/invitation-email.webp)
+
+## Choose a hosting path
+
+### Recommended: Base44 Backend
+
+This repository is implemented against Base44, so this path requires configuration but no backend rewrite. Deploying creates a separate app under your Base44 account rather than a server you operate yourself.
+
+One Base44 deployment includes:
 
 - A React and TypeScript web application
 - Base44 entities for event data
@@ -17,6 +41,12 @@ Your deployment includes:
 - Optional Gmail and Google Drive connectors
 - Base44 Analytics events and operational reporting
 - Admin and participant MCP servers
+
+### Other hosting platforms
+
+Base44 is the easiest option because this repository already uses its database, authentication, functions, connectors, and hosting. You can also ask Codex to migrate the project to [ChatGPT Sites](https://learn.chatgpt.com/docs/sites), Vercel, Cloudflare, or another platform.
+
+A migration needs replacements for the Base44 backend services. For example, use [Resend](https://resend.com/) for email and keep the Admin and User MCP servers available through authenticated HTTPS endpoints.
 
 ## Features
 
@@ -171,13 +201,29 @@ Each participant can connect an agent to the read-only User MCP using their pers
 
 The participant portal generates a copyable Codex install command, verification prompt, and manual client configuration while masking the personal key on screen. A participant key cannot read another participant's data.
 
-## Self-host your own instance
+## Deploy with Base44
+
+### What you need to configure
+
+| Configuration | Required | Purpose |
+| --- | --- | --- |
+| Base44 project link | Yes | Connects this checkout to the Base44 app you own |
+| `ADMIN_MCP_TOKEN` | Yes | Protects the Admin MCP endpoint |
+| `ACCESS_LINK_SECRET` | Yes | Signs participant links and protects the User MCP endpoint |
+| Admin user role | Yes | Grants access to `/admin` |
+| `APP_URL` | For email | Sets the HTTPS origin used in participant and mentor invitations |
+| Gmail connector | For email | Sends participant and mentor invitations |
+| Google login | Recommended | Provides the admin and participant sign-in flow enabled by this repository |
+| `EVENT_PHOTO_FOLDER_ID` | For photos | Selects the Google Drive folder used by the gallery |
+| Google Drive connector | For photos | Reads event photos and creates participant pick folders |
+
+Generate unique secrets for each deployment. Do not reuse the Admin MCP token as the access-link signing secret.
 
 ### 1. Requirements
 
 - Node.js 22.18 or newer
 - npm
-- A Base44 account
+- A [Base44 Backend](https://base44.com/backend) account
 - A Google account if you want Google login, Gmail invitations, or Drive photos
 
 ### 2. Clone and install
@@ -202,8 +248,10 @@ The generated `base44/.app.jsonc` links this checkout to your app. It is ignored
 To use an existing Base44 app instead:
 
 ```bash
-npx base44 link --projectId <base44-project-id>
+npx base44 link
 ```
+
+Select the existing backend project when prompted.
 
 ### 4. Configure backend secrets
 
@@ -215,21 +263,25 @@ npx base44 secrets set \
   ACCESS_LINK_SECRET=<separate-random-signing-secret>
 ```
 
-Optional deployment settings:
+Add the public application URL if you will send invitations:
 
 ```bash
-npx base44 secrets set \
-  EVENT_PHOTO_FOLDER_ID=<google-drive-folder-id> \
-  APP_URL=https://your-event.example
+npx base44 secrets set APP_URL=https://your-event.example
 ```
 
-`EVENT_PHOTO_FOLDER_ID` enables the Drive-backed gallery and participant-folder synchronization. `APP_URL` is used in participant and mentor emails; set it to the Base44 URL printed after deployment or to your custom domain.
+`APP_URL` must use HTTPS. Set it to the Base44 URL printed after deployment or to your custom domain. Invitation delivery fails if it is missing or invalid.
+
+If you want the Drive-backed gallery and participant-folder synchronization, also set:
+
+```bash
+npx base44 secrets set EVENT_PHOTO_FOLDER_ID=<google-drive-folder-id>
+```
 
 Do not reuse these values or store them in `.env`, source files, issue reports, or screenshots.
 
-### 5. Connect Google services
+### 5. Connect optional Google services
 
-The repository includes Gmail and Google Drive connector definitions. Push them from an interactive terminal and authorize the Google account that will send invitations and own the event photo folder:
+The repository includes Gmail and Google Drive connector definitions. If you use either feature, push the connectors from an interactive terminal and authorize the Google account that will send invitations or own the event photo folder:
 
 ```bash
 npx base44 connectors push
@@ -284,7 +336,7 @@ Open `/admin` and configure the event in this order:
 
 Use synthetic data while testing. Real attendee exports and promo values must stay outside the repository.
 
-## Connect the Admin MCP
+## Connect the Admin MCP on Base44
 
 The local proxy keeps the Admin MCP token in the macOS Keychain instead of an MCP client configuration file.
 

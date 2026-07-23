@@ -345,7 +345,7 @@ function fakeAdminClient() {
   return {
     entities: {
       Participant: entity("Participant", participants), Mentor: entity("Mentor", mentors), PromoCode: entity("PromoCode", promos),
-      EventSettings: entity("EventSettings", settings), AccessDeliveryAttempt: entity("AccessDeliveryAttempt", deliveries), Guest: entity("Guest", []),
+      EventSettings: entity("EventSettings", settings), AccessDeliveryAttempt: entity("AccessDeliveryAttempt", deliveries),
       Judge: entity("Judge", judges), JudgeGroup: entity("JudgeGroup", judgeGroups), TeamInfo: entity("TeamInfo", teamInfos),
     },
     functions: {

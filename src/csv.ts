@@ -1,13 +1,5 @@
 export class CsvValidationError extends Error {}
 
-export interface LumaGuestStatusRow {
-  guestKey: string;
-  displayName: string;
-  registrationStatus: string;
-  checkInStatus: "checked_in" | "not_checked_in";
-  checkedInAt: string;
-}
-
 export interface ParticipantImportRow {
   email: string;
   displayName: string;
@@ -44,31 +36,13 @@ interface PromoAllocationImport {
   values: string[];
 }
 
-const ticketHeaders = new Set([
-  "ticket_key",
-  "guest_key",
-  "api_id",
-  "guest_api_id",
-  "ticket_id",
-  "id",
-]);
 const emailHeaders = new Set(["email", "email_address"]);
 const nameHeaders = new Set(["name", "guest_name", "full_name"]);
-const registrationStatusHeaders = new Set([
-  "approval_status",
-  "registration_status",
-  "status",
-]);
 const participantApprovalStatusHeaders = new Set(["approval_status"]);
 const checkInStatusHeaders = new Set([
   "check_in_status",
   "checked_in",
   "is_checked_in",
-]);
-const checkedInAtHeaders = new Set([
-  "checked_in_at",
-  "check_in_time",
-  "check_in_date",
 ]);
 const teamHeaders = new Set(["team", "team_name", "group", "group_name"]);
 const lumaTeamHeaders = new Set(["who_are_you_applying_with"]);
@@ -164,59 +138,6 @@ function parsePromoAllocationCsv(csv: string): PromoAllocationImport {
   });
   assertUnique(values, creditType === "codex" ? "Codex credit link" : "API credit");
   return { creditType, values };
-}
-
-export function parseLumaGuestStatusCsv(csv: string): LumaGuestStatusRow[] {
-  const { headers, rows } = parseCsv(csv);
-  const ticketIndex = findHeader(headers, ticketHeaders);
-  const emailIndex = findHeader(headers, emailHeaders);
-  const nameIndex = findHeader(headers, nameHeaders);
-  const registrationStatusIndex = findHeader(headers, registrationStatusHeaders);
-  const checkInStatusIndex = findHeader(headers, checkInStatusHeaders);
-  const checkedInAtIndex = findHeader(headers, checkedInAtHeaders);
-
-  if (nameIndex === -1) {
-    throw new CsvValidationError(`Luma CSV needs a name column; found: ${headers.join(", ")}`);
-  }
-  if (ticketIndex === -1 && emailIndex === -1) {
-    throw new CsvValidationError(
-      `Luma CSV needs an API ID/ticket ID or email column; found: ${headers.join(", ")}`,
-    );
-  }
-
-  const guests = rows.map((row, index) => {
-    const displayName = row[nameIndex]?.trim() ?? "";
-    const guestKey =
-      (ticketIndex === -1 ? "" : row[ticketIndex]?.trim()) ||
-      (emailIndex === -1 ? "" : row[emailIndex]?.trim().toLowerCase()) ||
-      `row-${index + 2}`;
-    const registrationStatus =
-      (registrationStatusIndex === -1 ? "" : row[registrationStatusIndex]?.trim()) || "Going";
-    const explicitStatus =
-      checkInStatusIndex === -1 ? "" : row[checkInStatusIndex]?.trim().toLowerCase() ?? "";
-    const checkedInAt =
-      checkedInAtIndex === -1 ? "" : row[checkedInAtIndex]?.trim() ?? "";
-
-    if (!displayName) {
-      throw new CsvValidationError(`invalid Luma CSV row ${index + 2}: missing name`);
-    }
-
-    const checkInStatus =
-      checkedInAt || ["yes", "true", "checked in", "checked_in"].includes(explicitStatus)
-        ? "checked_in"
-        : "not_checked_in";
-
-    return {
-      guestKey,
-      displayName,
-      registrationStatus,
-      checkInStatus,
-      checkedInAt,
-    } satisfies LumaGuestStatusRow;
-  });
-
-  assertUnique(guests.map((guest) => guest.guestKey), "guest key");
-  return guests;
 }
 
 export function parseParticipantCsv(csv: string): ParticipantImportRow[] {

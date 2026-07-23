@@ -29,7 +29,6 @@ const participantEntity = base44.entities.Participant!;
 const mentorEntity = base44.entities.Mentor!;
 const promoEntity = base44.entities.PromoCode!;
 const accessDeliveryAttemptEntity = base44.entities.AccessDeliveryAttempt!;
-const guestEntity = base44.entities.Guest!;
 const teamInfoEntity = base44.entities.TeamInfo!;
 const accessExpiresAt = "2026-08-01T21:00:00.000Z";
 
@@ -215,7 +214,6 @@ export function AdminDashboard({ user, onNavigate }: { user: AppUser; onNavigate
     await runImport(async () => {
       await Promise.all([
         accessDeliveryAttemptEntity.deleteMany({}),
-        guestEntity.deleteMany({}),
         mentorEntity.deleteMany({}),
         participantEntity.deleteMany({}),
         promoEntity.deleteMany({}),

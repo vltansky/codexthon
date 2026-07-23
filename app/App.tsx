@@ -92,7 +92,7 @@ export function App() {
     return <AdminDashboard user={user} onNavigate={navigateAdmin} />;
   }
   if (photosRoute) return <ParticipantPhotosPage view={photosRoute.view} page={photosRoute.page} />;
-  return <ParticipantDashboard user={user} />;
+  return <ParticipantDashboard />;
 }
 
 function isLocalPreview() {

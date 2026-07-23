@@ -1,0 +1,30 @@
+{
+  "name": "PhotoFaceIndex",
+  "description": "Per-photo face detection results (boxes and embeddings) powering the people gallery; one record per indexed Drive photo",
+  "type": "object",
+  "properties": {
+    "photo_id": { "type": "string" },
+    "photo_name": { "type": "string" },
+    "indexed_at": { "type": "string", "format": "date-time" },
+    "faces": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "face_id": { "type": "string" },
+          "cluster_key": { "type": "string" },
+          "score": { "type": "number" },
+          "box": { "type": "array", "items": { "type": "number" } },
+          "embedding": { "type": "array", "items": { "type": "number" } }
+        }
+      }
+    }
+  },
+  "required": ["photo_id"],
+  "rls": {
+    "create": { "user_condition": { "role": "admin" } },
+    "read": { "user_condition": { "role": "admin" } },
+    "update": { "user_condition": { "role": "admin" } },
+    "delete": { "user_condition": { "role": "admin" } }
+  }
+}

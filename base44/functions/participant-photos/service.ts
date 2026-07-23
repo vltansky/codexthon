@@ -1,7 +1,6 @@
 import {
   copyDrivePhotoToFolder,
   createSharedDriveFolder,
-  downloadDrivePhoto,
   driveFolderLink,
   eventPhotoFolderLink,
   findOrCreatePicksParentFolder,
@@ -14,7 +13,6 @@ import {
   trashDriveFile,
   type DrivePhoto,
 } from "./drive.ts";
-import { zipStream, type ZipEntrySource } from "./zip.ts";
 
 const defaultPageSize = 24;
 const maximumPageSize = 60;
@@ -88,19 +86,6 @@ export async function saveParticipantPhotoSelection(
   return { selectedPhotoIds };
 }
 
-export async function downloadParticipantPhotosZip(
-  base44: any,
-  participant: any,
-  fetcher: typeof fetch = fetch,
-): Promise<ReadableStream<Uint8Array>> {
-  const accessToken = await driveAccessToken(base44);
-  const photos = await listDrivePhotos(accessToken, fetcher);
-  const selectedIds = new Set(storedSelection(participant));
-  const selectedPhotos = photos.filter(({ id }) => selectedIds.has(id));
-  if (selectedPhotos.length === 0) throw new Error("No photos selected");
-  return zipStream(zipEntries(selectedPhotos, accessToken, fetcher));
-}
-
 export async function exportParticipantPhotosFolder(
   base44: any,
   participant: any,
@@ -139,45 +124,6 @@ export async function exportParticipantPhotosFolder(
     await Promise.all(operations.slice(batchStart, batchStart + 8).map((operation) => operation()));
   }
   return { folderLink: folder.link, photoCount: selectedPhotos.length };
-}
-
-async function* zipEntries(
-  photos: DrivePhoto[],
-  accessToken: string,
-  fetcher: typeof fetch,
-): AsyncGenerator<ZipEntrySource> {
-  const usedNames = new Set<string>();
-  const missingNames: string[] = [];
-  for (const photo of photos) {
-    const data = await downloadDrivePhoto(accessToken, photo.id, fetcher);
-    if (!data) {
-      console.error(`participant-photos: could not download ${photo.id} (${photo.name}) for the zip archive`);
-      missingNames.push(photo.name);
-      continue;
-    }
-    yield { name: uniqueEntryName(photo.name, usedNames), data };
-  }
-  if (missingNames.length > 0) {
-    const manifest = `These selected photos could not be downloaded from Google Drive. Please try again later:\n${missingNames.join("\n")}\n`;
-    yield { name: "MISSING.txt", data: textEntry(manifest) };
-  }
-}
-
-async function* textEntry(text: string): AsyncGenerator<Uint8Array> {
-  yield new TextEncoder().encode(text);
-}
-
-function uniqueEntryName(name: string, usedNames: Set<string>): string {
-  const safeName = name.replaceAll("/", "-").replaceAll("\\", "-") || "photo";
-  let candidate = safeName;
-  for (let suffix = 2; usedNames.has(candidate); suffix++) {
-    const dotIndex = safeName.lastIndexOf(".");
-    candidate = dotIndex > 0
-      ? `${safeName.slice(0, dotIndex)} (${suffix})${safeName.slice(dotIndex)}`
-      : `${safeName} (${suffix})`;
-  }
-  usedNames.add(candidate);
-  return candidate;
 }
 
 function storedSelection(participant: any): string[] {

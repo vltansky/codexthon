@@ -639,7 +639,7 @@ function registerContentAndImportTools(server: McpServer, client: AdminClient) {
     inputSchema: z.object({ confirmation: z.literal("DELETE ALL EVENT DATA") }).strict(), annotations: annotations.destructive,
   }, async () => {
     const deleted = await Promise.all([
-      client.entities.AccessDeliveryAttempt.deleteMany({}), client.entities.Guest.deleteMany({}),
+      client.entities.AccessDeliveryAttempt.deleteMany({}),
       client.entities.Mentor.deleteMany({}), client.entities.Judge.deleteMany({}), client.entities.JudgeGroup.deleteMany({}),
       client.entities.Participant.deleteMany({}), client.entities.PromoCode.deleteMany({}), client.entities.TeamInfo.deleteMany({}),
     ]);

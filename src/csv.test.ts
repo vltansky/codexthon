@@ -3,7 +3,6 @@ import test from "node:test";
 
 import {
   parseCheckInCsv,
-  parseLumaGuestStatusCsv,
   parseParticipantCsv,
   parseMentorTeamCsv,
   parsePromoBundleCsv,
@@ -71,33 +70,6 @@ test("rejects mismatched allocation exports", () => {
   const api = `${header}\nEvent host,https://luma.com/event,API,API-CODE-1,true\nEvent host,https://luma.com/event,API,API-CODE-2,true`;
 
   assert.throws(() => parsePromoFiles([api, codex]), /same number of rows/i);
-});
-
-test("normalizes Luma check-in status from timestamp or explicit status", () => {
-  const guests = parseLumaGuestStatusCsv(
-    [
-      "API ID,Name,Approval Status,Checked In At",
-      "g-1,Ada Lovelace,Going,2026-07-19 09:10",
-      "g-2,Grace Hopper,Going,",
-    ].join("\n"),
-  );
-
-  assert.deepEqual(guests, [
-    {
-      guestKey: "g-1",
-      displayName: "Ada Lovelace",
-      registrationStatus: "Going",
-      checkInStatus: "checked_in",
-      checkedInAt: "2026-07-19 09:10",
-    },
-    {
-      guestKey: "g-2",
-      displayName: "Grace Hopper",
-      registrationStatus: "Going",
-      checkInStatus: "not_checked_in",
-      checkedInAt: "",
-    },
-  ]);
 });
 
 test("parses participant, team, and mentor details", () => {
