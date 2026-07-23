@@ -9,8 +9,8 @@ import { eventQuickLinks } from "./event-quick-links.ts";
 const secret = "a-strong-function-bundle-secret-value";
 
 test("function-local signer and verifier share one token contract", async () => {
-  const signers = await Promise.all(["access-admin", "portal-data"].map(loadSigner));
-  const verifiers = await Promise.all(["access-portal", "participant-photos", "portal-mcp"].map(loadVerifier));
+  const signers = await Promise.all(["access-admin", "portal-data", "mentor-invite"].map(loadSigner));
+  const verifiers = await Promise.all(["access-portal", "participant-photos", "portal-mcp", "mentor-data"].map(loadVerifier));
   const payload = {
     accessKey: "participant-access-key-1234",
     version: 3,

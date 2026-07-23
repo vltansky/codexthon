@@ -7,9 +7,10 @@ import type { MentorPortalData } from "./types";
 import { unwrapBase44FunctionResponse } from "../src/base44-response";
 import { photosPagePath } from "../src/photo-gallery";
 
-export function MentorDashboard({ fallbackError }: { fallbackError?: string }) {
+export function MentorDashboard({ fallbackError, accessToken, onExit }: { fallbackError?: string; accessToken?: string; onExit?: () => void }) {
   const [data, setData] = useState<MentorPortalData | null>(null);
   const [error, setError] = useState("");
+  const exit = onExit ?? (() => base44.auth.logout(window.location.origin));
 
   useEffect(() => {
     // Mentor data is permission-filtered by the authenticated Base44 function.
@@ -19,7 +20,7 @@ export function MentorDashboard({ fallbackError }: { fallbackError?: string }) {
   async function loadMentorPortal() {
     setError("");
     try {
-      setData(unwrapBase44FunctionResponse<MentorPortalData>(await base44.functions.invoke("mentor-data", {})));
+      setData(unwrapBase44FunctionResponse<MentorPortalData>(await base44.functions.invoke("mentor-data", accessToken ? { token: accessToken } : {})));
     } catch (caught) {
       setError(fallbackError ?? (caught instanceof Error ? caught.message : "Could not load your mentor details"));
     }
@@ -31,7 +32,7 @@ export function MentorDashboard({ fallbackError }: { fallbackError?: string }) {
         <p className="eyebrow">Access unavailable</p>
         <h1>We couldn’t match your registration.</h1>
         <p>{error}</p>
-        <button className="secondary-button" onClick={() => base44.auth.logout(window.location.origin)}>Sign out</button>
+        <button className="secondary-button" onClick={exit}>Sign out</button>
       </main>
     );
   }
@@ -46,18 +47,18 @@ export function MentorDashboard({ fallbackError }: { fallbackError?: string }) {
     <main className="participant-shell">
       <header className="portal-nav">
         <div className="portal-wordmark"><span>BUILD WEEK · TEL AVIV</span></div>
-        <button className="text-button" onClick={() => base44.auth.logout(window.location.origin)}>Sign out</button>
+        <button className="text-button" onClick={exit}>Sign out</button>
       </header>
 
       <section className="mentor-hero">
         <p className="eyebrow">Mentor portal</p>
         <h1>Welcome, {firstName}.</h1>
         <p>{data.teams.length ? `You are mentoring ${data.teams.length} team${data.teams.length === 1 ? "" : "s"} tonight.` : "No teams are assigned to you yet. Check back after assignments are published."}</p>
-        <div className="mentor-links">
+        {!accessToken && <div className="mentor-links">
           <a href={photosPagePath("all")} onClick={internalLinkHandler(photosPagePath("all"))}>Browse event photos <ArrowRight size={14} aria-hidden="true" /></a>
           <a href={photosPagePath("people")} onClick={internalLinkHandler(photosPagePath("people"))}>Find your face <ArrowRight size={14} aria-hidden="true" /></a>
           <a href={photosPagePath("mine")} onClick={internalLinkHandler(photosPagePath("mine"))}>My photos <ArrowRight size={14} aria-hidden="true" /></a>
-        </div>
+        </div>}
       </section>
 
       <div className="mentor-teams-grid">

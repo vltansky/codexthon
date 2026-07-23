@@ -1,10 +1,13 @@
 import { createClientFromRequest } from "npm:@base44/sdk";
 
 import { appUrl } from "./app-url.ts";
+import { signAccessToken } from "./access-link.ts";
 import { buildMentorInviteEmail } from "./branded-email.ts";
 import { sendGmailAccessEmail } from "./gmail.ts";
 
 const batchSize = 50;
+const defaultExpiry = "2026-08-01T21:00:00.000Z";
+const privateResponse = { headers: { "Cache-Control": "no-store", "Referrer-Policy": "no-referrer" } };
 
 Deno.serve(async (request) => {
   try {
@@ -13,6 +16,7 @@ Deno.serve(async (request) => {
     if (!user || user.role !== "admin") return Response.json({ error: "Admin access required" }, { status: 403 });
 
     const body = await request.json() as Record<string, unknown>;
+    if (body.action === "link") return linkResponse(base44, body);
     const mentorIds = Array.isArray(body.mentorIds)
       ? body.mentorIds.filter((id): id is string => typeof id === "string").slice(0, batchSize)
       : [];
@@ -31,6 +35,27 @@ Deno.serve(async (request) => {
     );
   }
 });
+
+async function linkResponse(base44: any, body: Record<string, unknown>) {
+  const secret = Deno.env.get("ACCESS_LINK_SECRET");
+  if (!secret) return Response.json({ error: "Access links are not configured" }, { status: 503 });
+  const mentorId = typeof body.mentorId === "string" ? body.mentorId : "";
+  const mentor = mentorId ? await base44.asServiceRole.entities.Mentor.get(mentorId).catch(() => null) : null;
+  if (!mentor) return Response.json({ error: "Mentor not found" }, { status: 404 });
+  const data = {
+    access_key: mentor.access_key || crypto.randomUUID(),
+    access_version: mentor.access_version || 1,
+    access_expires_at: mentor.access_expires_at || defaultExpiry,
+    invited_at: new Date().toISOString(),
+  };
+  await base44.asServiceRole.entities.Mentor.update(mentorId, data);
+  const token = await signAccessToken({
+    accessKey: data.access_key,
+    version: data.access_version,
+    expiresAt: data.access_expires_at,
+  }, secret);
+  return Response.json({ mentorId, url: `${appUrl()}/#mentor=${encodeURIComponent(token)}` }, privateResponse);
+}
 
 async function invite(base44: any, mentorId: string) {
   const mentor = await base44.asServiceRole.entities.Mentor.get(mentorId).catch(() => null);

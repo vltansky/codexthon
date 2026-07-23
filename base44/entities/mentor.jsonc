@@ -10,6 +10,9 @@
     "details": { "type": "string" },
     "linkedin": { "type": "string", "format": "uri" },
     "invited_at": { "type": "string" },
+    "access_key": { "type": "string" },
+    "access_version": { "type": "integer", "default": 1 },
+    "access_expires_at": { "type": "string" },
     "selected_photo_ids": {
       "type": "array",
       "items": { "type": "string" },

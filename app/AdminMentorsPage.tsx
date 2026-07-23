@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
 
 import { normalizeParticipantName, parseMentorTeamCsv } from "../src/csv";
+import { unwrapBase44FunctionResponse } from "../src/base44-response";
 import { AdminHeader, type AdminPage } from "./AdminHeader";
 import { base44 } from "./base44Client";
 import { downloadCsv } from "./lib/download-csv";
@@ -134,9 +135,12 @@ export function AdminMentorsPage({ user, onNavigate }: { user: AppUser; onNaviga
 
   async function inviteMentor(mentor: MentorRecord) {
     await runMutation(async () => {
-      await navigator.clipboard.writeText(window.location.origin);
-      await mentorEntity.update(mentor.id, { invited_at: new Date().toISOString() });
-      setNotice(`Copied the portal link for ${mentor.display_name} — paste it to them directly`);
+      const response = unwrapBase44FunctionResponse<{ url: string }>(
+        await base44.functions.invoke("mentor-invite", { action: "link", mentorId: mentor.id }),
+      );
+      if (!response.url) throw new Error("Could not create the personal link");
+      await navigator.clipboard.writeText(response.url);
+      setNotice(`Copied ${mentor.display_name}’s personal link — paste it to them directly`);
     });
   }
 
@@ -224,7 +228,7 @@ export function AdminMentorsPage({ user, onNavigate }: { user: AppUser; onNaviga
         <form className="directory-form" autoComplete="off" onSubmit={(event) => void saveMentor(event)}>
           <div><p className="section-kicker">{editingId ? "Edit mentor" : "New mentor"}</p><h2>{editingId ? "Update details" : "Add mentor"}</h2></div>
           <label>Name<input required value={form.displayName} onChange={(event) => setForm({ ...form, displayName: event.target.value })} /></label>
-          <label>Email<input type="email" required value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} /></label>
+          <label>Email<input type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} /></label>
           <label>Phone<input type="tel" value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} /></label>
           <label>LinkedIn<input type="url" placeholder="https://linkedin.com/in/..." value={form.linkedin} onChange={(event) => setForm({ ...form, linkedin: event.target.value })} /></label>
           <label>Details<textarea rows={4} value={form.details} onChange={(event) => setForm({ ...form, details: event.target.value })} /></label>
@@ -245,7 +249,7 @@ export function AdminMentorsPage({ user, onNavigate }: { user: AppUser; onNaviga
                   ? <ul>{teams.map(([teamKey, { teamName, members }]) => <li key={teamKey}><a className="team-link" href={adminTeamPath(teamKey)} onClick={internalLinkHandler(adminTeamPath(teamKey))}>{teamName}</a> <small>({members})</small></li>)}</ul>
                   : <span>No teams assigned</span>}
               </div>
-              <div className="directory-row-actions"><button disabled={busy} onClick={() => void inviteMentor(mentor)}>{mentor.invited_at ? "Re-invite" : "Invite"}</button><button disabled={busy} onClick={() => editMentor(mentor)}>Edit</button><button className={pendingDeleteId === mentor.id ? "confirm" : ""} disabled={busy} onClick={() => void deleteMentor(mentor)}>{pendingDeleteId === mentor.id ? "Confirm delete" : "Delete"}</button></div>
+              <div className="directory-row-actions"><button disabled={busy} onClick={() => void inviteMentor(mentor)}>Copy link</button><button disabled={busy} onClick={() => editMentor(mentor)}>Edit</button><button className={pendingDeleteId === mentor.id ? "confirm" : ""} disabled={busy} onClick={() => void deleteMentor(mentor)}>{pendingDeleteId === mentor.id ? "Confirm delete" : "Delete"}</button></div>
             </article>;
           })}
           {!visibleMentors.length && <p className="directory-empty">No mentors match this search.</p>}
