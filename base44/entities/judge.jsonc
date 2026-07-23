@@ -8,7 +8,11 @@
     "email": { "type": "string", "format": "email" },
     "phone": { "type": "string" },
     "details": { "type": "string" },
-    "linkedin": { "type": "string", "format": "uri" }
+    "linkedin": { "type": "string", "format": "uri" },
+    "invited_at": { "type": "string" },
+    "access_key": { "type": "string" },
+    "access_version": { "type": "integer", "default": 1 },
+    "access_expires_at": { "type": "string" }
   },
   "required": ["judge_key", "display_name"],
   "rls": {

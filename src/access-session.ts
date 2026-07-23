@@ -17,3 +17,13 @@ export function mentorTokenFromHash(hash: string): string | null {
 export function buildMentorHash(token: string): string {
   return `#mentor=${encodeURIComponent(token)}`;
 }
+
+export function judgeTokenFromHash(hash: string): string | null {
+  const parameters = new URLSearchParams(hash.replace(/^#/, ""));
+  const token = parameters.get("judge")?.trim();
+  return token || null;
+}
+
+export function buildJudgeHash(token: string): string {
+  return `#judge=${encodeURIComponent(token)}`;
+}

@@ -17,17 +17,20 @@ import { participantAnalytics } from "./participantAnalytics";
 import { ParticipantDashboard } from "./ParticipantDashboard";
 import { ParticipantPhotosPage } from "./ParticipantPhotosPage";
 import type { AppUser } from "./types";
+import { JudgeDashboard } from "./JudgeDashboard";
 import { MentorDashboard } from "./MentorDashboard";
-import { accessTokenFromHash, mentorTokenFromHash } from "../src/access-session";
+import { accessTokenFromHash, judgeTokenFromHash, mentorTokenFromHash } from "../src/access-session";
 import { parsePhotosRoute } from "../src/photo-gallery";
 
 const accessSessionKey = "codex-hackathon-access";
 const mentorSessionKey = "codex-hackathon-mentor-access";
+const judgeSessionKey = "codex-hackathon-judge-access";
 
 export function App() {
   const [user, setUser] = useState<AppUser | null | undefined>(undefined);
   const [accessToken, setAccessToken] = useState<string | null>(() => isLocalPreview() ? null : consumeAccessToken());
   const [mentorToken, setMentorToken] = useState<string | null>(() => isLocalPreview() ? null : consumeMentorToken());
+  const [judgeToken, setJudgeToken] = useState<string | null>(() => isLocalPreview() ? null : consumeJudgeToken());
   const location = useSyncExternalStore(subscribeToNavigation, () => `${window.location.pathname}${window.location.search}`);
   const [pathname = "/", search = ""] = location.split(/(?=\?)/);
   const photosRoute = parsePhotosRoute(pathname, search);
@@ -36,8 +39,8 @@ export function App() {
 
   useEffect(() => {
     // Authentication is persisted by Base44 and must be resolved after page load.
-    if (!accessToken && !mentorToken && !localPreview) void resolveUser();
-  }, [accessToken, mentorToken, localPreview]);
+    if (!accessToken && !mentorToken && !judgeToken && !localPreview) void resolveUser();
+  }, [accessToken, mentorToken, judgeToken, localPreview]);
 
   useEffect(() => {
     // Personal links navigate by fragment, so same-tab link changes do not reload the app.
@@ -45,6 +48,7 @@ export function App() {
     window.addEventListener("hashchange", () => {
       setAccessToken(localPreview ? null : consumeAccessToken());
       setMentorToken(localPreview ? null : consumeMentorToken());
+      setJudgeToken(localPreview ? null : consumeJudgeToken());
     }, { signal: controller.signal });
     return () => controller.abort();
   }, [localPreview]);
@@ -82,8 +86,16 @@ export function App() {
   if (mentorToken) {
     if (photosRoute) return <ParticipantPhotosPage accessToken={mentorToken} view={photosRoute.view} page={photosRoute.page} clusterKey={photosRoute.clusterKey} />;
     return <MentorDashboard accessToken={mentorToken} onExit={() => {
+      localStorage.removeItem(mentorSessionKey);
       sessionStorage.removeItem(mentorSessionKey);
       setMentorToken(null);
+    }} />;
+  }
+  if (judgeToken) {
+    return <JudgeDashboard accessToken={judgeToken} onExit={() => {
+      localStorage.removeItem(judgeSessionKey);
+      sessionStorage.removeItem(judgeSessionKey);
+      setJudgeToken(null);
     }} />;
   }
   if (localPreview) {
@@ -155,8 +167,18 @@ function consumeAccessToken(): string | null {
 
 function consumeMentorToken(): string | null {
   const token = mentorTokenFromHash(window.location.hash);
-  if (!token) return sessionStorage.getItem(mentorSessionKey);
-  sessionStorage.setItem(mentorSessionKey, token);
+  // localStorage (not sessionStorage) so links opened in new tabs — e.g. a
+  // /photos URL from a chat — still find the mentor session on this device.
+  if (!token) return localStorage.getItem(mentorSessionKey) ?? sessionStorage.getItem(mentorSessionKey);
+  localStorage.setItem(mentorSessionKey, token);
+  history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+  return token;
+}
+
+function consumeJudgeToken(): string | null {
+  const token = judgeTokenFromHash(window.location.hash);
+  if (!token) return localStorage.getItem(judgeSessionKey) ?? sessionStorage.getItem(judgeSessionKey);
+  localStorage.setItem(judgeSessionKey, token);
   history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
   return token;
 }

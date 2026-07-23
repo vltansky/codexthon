@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 
+import { unwrapBase44FunctionResponse } from "../src/base44-response";
 import { AdminHeader, type AdminPage } from "./AdminHeader";
 import { base44 } from "./base44Client";
 import { downloadCsv } from "./lib/download-csv";
@@ -163,6 +164,17 @@ export function AdminJudgingPage({ user, onNavigate }: { user: AppUser; onNaviga
     setJudgeForm(emptyJudgeForm);
   }
 
+  async function copyJudgeLink(judge: JudgeRecord) {
+    await runMutation(async () => {
+      const response = unwrapBase44FunctionResponse<{ url: string }>(
+        await base44.functions.invoke("judge-invite", { judgeId: judge.id }),
+      );
+      if (!response.url) throw new Error("Could not create the personal link");
+      await navigator.clipboard.writeText(response.url);
+      setNotice(`Copied ${judge.display_name}’s personal link — paste it to them directly`);
+    });
+  }
+
   async function saveGroup(event: FormEvent) {
     event.preventDefault();
     const name = groupForm.name.trim();
@@ -285,7 +297,7 @@ export function AdminJudgingPage({ user, onNavigate }: { user: AppUser; onNaviga
           {visibleJudges.map((judge) => {
             const memberOf = groups.filter((group) => (group.judge_keys ?? []).includes(judge.judge_key));
             return <article className="mentor-row" key={judge.id}>
-              <div><strong>{judge.display_name}</strong><small>{judge.email || judge.phone || "No contact details"}</small></div>
+              <div><strong>{judge.display_name}</strong><small>{judge.email || judge.phone || "No contact details"}{judge.invited_at ? ` · Invited ${formatInviteDate(judge.invited_at)}` : ""}</small></div>
               <p>{judge.details || "No judge details"}</p>
               <div className="mentor-teams">
                 <small>{memberOf.length} group{memberOf.length === 1 ? "" : "s"}</small>
@@ -293,7 +305,7 @@ export function AdminJudgingPage({ user, onNavigate }: { user: AppUser; onNaviga
                   ? <ul>{memberOf.map((group) => <li key={group.id}>{group.name}</li>)}</ul>
                   : <span>Not in any group</span>}
               </div>
-              <div className="directory-row-actions"><button disabled={busy} onClick={() => editJudge(judge)}>Edit</button><button className={pendingDeleteJudgeId === judge.id ? "confirm" : ""} disabled={busy} onClick={() => void deleteJudge(judge)}>{pendingDeleteJudgeId === judge.id ? "Confirm delete" : "Delete"}</button></div>
+              <div className="directory-row-actions"><button disabled={busy} onClick={() => void copyJudgeLink(judge)}>Copy link</button><button disabled={busy} onClick={() => editJudge(judge)}>Edit</button><button className={pendingDeleteJudgeId === judge.id ? "confirm" : ""} disabled={busy} onClick={() => void deleteJudge(judge)}>{pendingDeleteJudgeId === judge.id ? "Confirm delete" : "Delete"}</button></div>
             </article>;
           })}
           {!visibleJudges.length && <p className="directory-empty">No judges match this search.</p>}
@@ -370,6 +382,10 @@ function teamOptionsWithStale(teams: TeamOption[], selected: Set<string>) {
 
 function slugify(value: string) {
   return value.trim().toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-|-$/g, "") || crypto.randomUUID();
+}
+
+function formatInviteDate(invitedAt: string) {
+  return new Date(invitedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
 function errorMessage(caught: unknown, fallback: string) {

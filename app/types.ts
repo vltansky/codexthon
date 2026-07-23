@@ -88,6 +88,7 @@ export interface JudgeRecord {
   phone?: string;
   details?: string;
   linkedin?: string;
+  invited_at?: string;
 }
 
 export interface JudgeGroupRecord {
@@ -138,6 +139,21 @@ export interface MentorPortalData {
     teamKey: string;
     teamName: string;
     members: Array<{ displayName: string; checkedIn: boolean }>;
+  }>;
+}
+
+export interface JudgePortalData {
+  judge: { displayName: string; email: string | null };
+  groups: Array<{
+    groupKey: string;
+    name: string;
+    details: string;
+    panel: string[];
+    teams: Array<{
+      teamKey: string;
+      teamName: string;
+      members: Array<{ displayName: string; checkedIn: boolean }>;
+    }>;
   }>;
 }
 

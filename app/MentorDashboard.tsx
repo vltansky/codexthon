@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ArrowRight } from "lucide-react";
 
 import { base44 } from "./base44Client";
+import { JudgeDashboard } from "./JudgeDashboard";
 import { internalLinkHandler } from "./navigation";
 import type { MentorPortalData } from "./types";
 import { unwrapBase44FunctionResponse } from "../src/base44-response";
@@ -50,6 +51,9 @@ export function MentorDashboard({ fallbackError, accessToken, onExit }: { fallba
       setSavingEmail(false);
     }
   }
+
+  // Signed-in users who are neither participants nor mentors may still be judges.
+  if (error && !accessToken) return <JudgeDashboard fallbackError={error} />;
 
   if (error) {
     return (
