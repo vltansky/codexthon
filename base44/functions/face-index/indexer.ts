@@ -167,8 +167,10 @@ export async function recomputeClusters(
 ): Promise<{ done: boolean; analyzedPhotos: number; failedPhotos: number; remainingPhotos: number; clusterCount?: number }> {
   // jpeg-js loads lazily: node-based tests import this module without npm: support.
   const { default: jpeg } = await import("npm:jpeg-js@0.4.4");
+  // The cached listing keeps the ~20-call batch loop from re-walking the
+  // Drive folder tree on every request.
   const [photos, records] = await Promise.all([
-    listIndexablePhotos(await driveAccessToken(base44), fetcher),
+    cachedPhotos(base44),
     listIndexRecords(base44),
   ]);
   const photoById = new Map(photos.map((photo) => [photo.id, photo]));

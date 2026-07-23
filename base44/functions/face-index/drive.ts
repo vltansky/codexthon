@@ -51,7 +51,7 @@ async function listFolderTreeIds(accessToken: string, fetcher: typeof fetch): Pr
       const response = await fetcher(`https://www.googleapis.com/drive/v3/files?${parameters}`, {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
-      if (!response.ok) throw new Error("Could not load event photos");
+      if (!response.ok) throw new Error(`Could not load event photos (Drive folder listing returned ${response.status})`);
 
       const data = await response.json() as { files?: DriveFile[] };
       for (const file of data.files ?? []) {
@@ -86,7 +86,7 @@ export async function listIndexablePhotos(accessToken: string, fetcher: typeof f
       const response = await fetcher(`https://www.googleapis.com/drive/v3/files?${parameters}`, {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
-      if (!response.ok) throw new Error("Could not load event photos");
+      if (!response.ok) throw new Error(`Could not load event photos (Drive file listing returned ${response.status})`);
 
       const data = await response.json() as { nextPageToken?: string; files?: DriveFile[] };
       for (const file of data.files ?? []) {
