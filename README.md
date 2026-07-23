@@ -16,7 +16,7 @@ Participants see their check-in state, team progress, event details, and credits
 
 ### Promo claims
 
-After check-in, the portal unlocks personal Codex and API credit links plus the optional partner coupon.
+After check-in, the portal unlocks personal Codex and API credit links.
 
 ![Unlocked promo claim area with synthetic credit links](docs/screenshots/promo-claim.webp)
 
@@ -64,7 +64,6 @@ A migration needs replacements for the Base44 backend services. For example, use
 - Event agenda, logistics, Wi-Fi details, resources, and Q&A
 - Build categories and event guidance
 - Promo credits revealed after check-in
-- Optional partner coupon and registration link
 - Privacy-conscious usage analytics with coarse, non-identifying events
 - Google Drive-backed photo gallery with saved personal picks and participant-folder synchronization
 
@@ -145,7 +144,6 @@ Admins can manage participant-facing content without changing source code:
 - Agenda
 - Promo instructions
 - Questions and answers
-- Optional partner coupon and registration URL
 
 ### Analytics
 

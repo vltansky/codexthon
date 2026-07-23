@@ -17,8 +17,6 @@ interface SettingsDraft {
   agenda: string;
   questionsAndAnswers: QuestionAndAnswerDraft[];
   promoInstructions: string;
-  partnerCouponCode: string;
-  partnerRegistrationUrl: string;
 }
 
 interface QuestionAndAnswerDraft extends QuestionAndAnswer {
@@ -40,8 +38,6 @@ const emptySettings: SettingsDraft = {
   agenda: "",
   questionsAndAnswers: [],
   promoInstructions: defaultPromoInstructions,
-  partnerCouponCode: "",
-  partnerRegistrationUrl: "",
 };
 
 export function AdminContentPage({ user, onNavigate }: { user: AppUser; onNavigate: (page: AdminPage) => void }) {
@@ -81,8 +77,6 @@ export function AdminContentPage({ user, onNavigate }: { user: AppUser; onNaviga
         agenda: settings.agenda,
         questions_and_answers: serializeQuestionsAndAnswers(settings.questionsAndAnswers),
         promo_instructions: settings.promoInstructions.trim(),
-        partner_coupon_code: settings.partnerCouponCode.trim(),
-        partner_registration_url: settings.partnerRegistrationUrl.trim(),
       };
       const saved = settingsRecord
         ? await settingsEntity.update(settingsRecord.id, payload)
@@ -151,8 +145,6 @@ export function AdminContentPage({ user, onNavigate }: { user: AppUser; onNaviga
           <p className="section-kicker">Schedule and help</p>
           <label>Agenda — one item per line<textarea rows={8} placeholder="5:00 PM — Doors open and check-in" value={settings.agenda} onChange={(event) => setSettings({ ...settings, agenda: event.target.value })} /></label>
           <label>How to apply the promo<textarea rows={6} value={settings.promoInstructions} onChange={(event) => setSettings({ ...settings, promoInstructions: event.target.value })} /></label>
-          <label>Partner coupon code<input autoComplete="off" value={settings.partnerCouponCode} onChange={(event) => setSettings({ ...settings, partnerCouponCode: event.target.value })} /></label>
-          <label>Partner registration URL<input type="url" placeholder="https://example.com/register" value={settings.partnerRegistrationUrl} onChange={(event) => setSettings({ ...settings, partnerRegistrationUrl: event.target.value })} /></label>
         </section>
         <section className="qa-editor-section">
           <div className="qa-editor-heading">
@@ -194,7 +186,5 @@ function toDraft(settings: EventSettingsRecord): SettingsDraft {
     agenda: settings.agenda ?? "",
     questionsAndAnswers: parseQuestionsAndAnswers(settings.questions_and_answers ?? "").map((item) => ({ ...item, id: crypto.randomUUID() })),
     promoInstructions: settings.promo_instructions?.trim() || defaultPromoInstructions,
-    partnerCouponCode: settings.partner_coupon_code ?? "",
-    partnerRegistrationUrl: settings.partner_registration_url ?? "",
   };
 }

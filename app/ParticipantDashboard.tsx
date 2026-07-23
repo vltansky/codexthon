@@ -51,7 +51,7 @@ function formatQuestionAnswer(answer: string) {
 export function ParticipantDashboard({ accessToken, onExit, preview = false }: { accessToken?: string; onExit?: () => void; preview?: boolean }) {
   const [data, setData] = useState<PortalData | null>(null);
   const [error, setError] = useState("");
-  const [copiedPromo, setCopiedPromo] = useState<"codex" | "api" | "base44" | null>(null);
+  const [copiedPromo, setCopiedPromo] = useState<"codex" | "api" | null>(null);
   const [copiedWifi, setCopiedWifi] = useState<string | null>(null);
   const [copiedConnectPrompt, setCopiedConnectPrompt] = useState(false);
   const [copiedManualStep, setCopiedManualStep] = useState<string | null>(null);
@@ -106,8 +106,6 @@ export function ParticipantDashboard({ accessToken, onExit, preview = false }: {
     agenda: fallbackAgenda,
     questionsAndAnswers: defaultQuestionsAndAnswers,
     promoInstructions: defaultPromoInstructions,
-    partnerCouponCode: "",
-    partnerRegistrationUrl: "",
   };
   const eventUrl = settings.eventUrl.trim();
   const wifiNetwork = settings.wifiNetwork.trim();
@@ -127,10 +125,10 @@ export function ParticipantDashboard({ accessToken, onExit, preview = false }: {
   const firstName = data.participant.displayName.split(" ")[0];
   const checkedInTeamMembers = data.teamMembers.filter((member) => member.checkedIn).length;
 
-  async function copyPromoLink(kind: "codex" | "api" | "base44", value: string) {
+  async function copyPromoLink(kind: "codex" | "api", value: string) {
     await copyParticipantValue(value, "promo", kind, () => {
       setCopiedPromo(kind);
-      if (kind !== "base44") reportPromoClaim();
+      reportPromoClaim();
     });
   }
 
@@ -217,8 +215,6 @@ export function ParticipantDashboard({ accessToken, onExit, preview = false }: {
         copiedPromo={copiedPromo}
         instructions={promoInstructions}
         promoLinks={data.promoLinks ?? { codexCredits: null, apiCredits: null }}
-        partnerCouponCode={settings.partnerCouponCode?.trim() ?? ""}
-        partnerRegistrationUrl={settings.partnerRegistrationUrl?.trim() ?? ""}
         onApply={trackPromoApply}
         onCopy={copyPromoLink}
       />
@@ -442,8 +438,6 @@ const localPreviewData: PortalData = {
     agenda: fallbackAgenda,
     questionsAndAnswers: defaultQuestionsAndAnswers,
     promoInstructions: defaultPromoInstructions,
-    partnerCouponCode: "DEMO-COUPON",
-    partnerRegistrationUrl: "https://example.test/register",
   },
   promoLinks: { codexCredits: null, apiCredits: null },
 };
@@ -486,15 +480,13 @@ function formatInstructionLine(line: string) {
   });
 }
 
-function CreditVault({ checkedIn, copiedPromo, instructions, partnerCouponCode, partnerRegistrationUrl, promoLinks, onApply, onCopy }: {
+function CreditVault({ checkedIn, copiedPromo, instructions, promoLinks, onApply, onCopy }: {
   checkedIn: boolean;
-  copiedPromo: "codex" | "api" | "base44" | null;
+  copiedPromo: "codex" | "api" | null;
   instructions: string;
-  partnerCouponCode: string;
-  partnerRegistrationUrl: string;
   promoLinks: PortalData["promoLinks"];
   onApply: (kind: "codex" | "api") => void;
-  onCopy: (kind: "codex" | "api" | "base44", value: string) => Promise<void>;
+  onCopy: (kind: "codex" | "api", value: string) => Promise<void>;
 }) {
   const promoOptions = [
     { kind: "codex", label: "Codex credits", value: promoLinks.codexCredits },
@@ -523,18 +515,6 @@ function CreditVault({ checkedIn, copiedPromo, instructions, partnerCouponCode, 
           </div>
           );
         })}
-        {checkedIn && partnerCouponCode ? <div className="credit-token base44-credit">
-          <span>Base44 · Shared event coupon</span>
-          <strong>2,000 Integration Credits</strong>
-          <p>Build on Codex, then deploy on <a href="https://base44.com/backend" target="_blank" rel="noreferrer">Base44’s backend</a> with database, auth, realtime, integrations, backend functions, and hosting built in.</p>
-          <ol>
-            {partnerRegistrationUrl ? <li><a href={partnerRegistrationUrl} target="_blank" rel="noreferrer">Open a Free Base44 account ↗</a></li> : null}
-            <li>Open your workspace profile, then select <strong>Credits</strong>.</li>
-            <li>Under <strong>Redeem a coupon or gift card</strong>, apply the coupon code.</li>
-          </ol>
-          <code>{partnerCouponCode}</code>
-          <button onClick={() => void onCopy("base44", partnerCouponCode)}>{copiedPromo === "base44" ? "Copied" : "Copy coupon code"}</button>
-        </div> : null}
       </div>
     </section>
   );

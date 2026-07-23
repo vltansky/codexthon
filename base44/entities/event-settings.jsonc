@@ -12,9 +12,7 @@
     "event_details": { "type": "string" },
     "agenda": { "type": "string" },
     "questions_and_answers": { "type": "string" },
-    "promo_instructions": { "type": "string" },
-    "partner_coupon_code": { "type": "string" },
-    "partner_registration_url": { "type": "string", "format": "uri" }
+    "promo_instructions": { "type": "string" }
   },
   "required": ["event_name"],
   "rls": {

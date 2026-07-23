@@ -183,14 +183,6 @@ h2 { margin-bottom: 18px; font-size: clamp(28px, 3vw, 42px); line-height: 1; }
 .credit-token button, .credit-apply { justify-self: start; border: 1px solid currentColor; padding: 11px 16px; background: transparent; color: inherit; font-weight: 700; cursor: pointer; }
 .credit-token button:hover, .credit-apply:hover { background: #fff; color: #000; }
 .credit-apply { text-decoration: none; }
-.base44-credit { border-color: #ffd572; color: #fff7e3; }
-.base44-credit > span { color: #ffd572; }
-.base44-credit > p { margin: 0; color: #d3c9b5; font-size: 14px; line-height: 1.6; }
-.base44-credit ol { display: grid; gap: 9px; margin: 0; padding-left: 20px; color: #e8dfce; font-size: 13px; line-height: 1.5; }
-.base44-credit li::marker { color: #ffd572; font-weight: 700; }
-.base44-credit li strong { font: inherit; letter-spacing: inherit; }
-.base44-credit a { color: inherit; text-underline-offset: 4px; }
-.base44-credit code { justify-self: start; border: 1px solid rgba(255, 213, 114, .45); padding: 8px 10px; background: rgba(255, 213, 114, .08); color: #ffd572; font: 600 15px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; user-select: all; }
 
 .check-in-band { display: grid; grid-template-columns: 150px 1fr auto; align-items: center; gap: 24px; margin: 28px 0 70px; padding: 20px 0; border-bottom: 4px solid #a8adaa; }
 .check-in-band span { color: #697376; font-size: 13px; font-weight: 700; text-transform: uppercase; }

@@ -546,7 +546,6 @@ function registerContentAndImportTools(server: McpServer, client: AdminClient) {
     wifi_network_secondary: z.string().trim().max(200).optional(), wifi_password_secondary: z.string().max(300).optional(),
     event_details: z.string().max(10000).optional(), agenda: z.string().max(20000).optional(),
     questions_and_answers: z.string().max(30000).optional(), promo_instructions: z.string().max(10000).optional(),
-    partner_coupon_code: z.string().max(500).optional(), partner_registration_url: z.string().trim().url().or(z.literal("")).optional(),
   };
   server.registerTool("build_week_update_content", {
     title: "Update event content", description: "Update selected participant-facing event, venue, agenda, Q&A, or promo-instruction fields. Omitted fields remain unchanged.",

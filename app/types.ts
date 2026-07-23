@@ -119,8 +119,6 @@ export interface EventSettingsRecord {
   agenda?: string;
   questions_and_answers?: string;
   promo_instructions?: string;
-  partner_coupon_code?: string;
-  partner_registration_url?: string;
 }
 
 export interface PromoCodeRecord {
@@ -171,8 +169,6 @@ export interface PortalData {
     agenda: string;
     questionsAndAnswers: string;
     promoInstructions: string;
-    partnerCouponCode?: string;
-    partnerRegistrationUrl?: string;
   } | null;
   promoLinks: {
     codexCredits: string | null;
