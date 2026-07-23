@@ -1,0 +1,50 @@
+{
+  "name": "Participant",
+  "description": "Imported hackathon participant and check-in state",
+  "type": "object",
+  "properties": {
+    "email": { "type": "string", "format": "email" },
+    "display_name": { "type": "string" },
+    "team_key": { "type": "string" },
+    "team_name": { "type": "string" },
+    "mentor_key": { "type": "string" },
+    "phone": { "type": "string" },
+    "linkedin": { "type": "string" },
+    "custom_fields": {
+      "type": "object",
+      "additionalProperties": { "type": "string" },
+      "default": {}
+    },
+    "checked_in": { "type": "boolean", "default": false },
+    "checked_in_at": { "type": "string" },
+    "active": { "type": "boolean", "default": true },
+    "is_exception": { "type": "boolean", "default": false },
+    "access_key": { "type": "string" },
+    "access_version": { "type": "integer", "default": 1 },
+    "access_enabled": { "type": "boolean", "default": true },
+    "access_expires_at": { "type": "string" },
+    "access_email_status": {
+      "type": "string",
+      "enum": ["unsent", "pending", "accepted", "failed", "unknown"],
+      "default": "unsent"
+    },
+    "access_email_pending_at": { "type": "string" },
+    "access_email_accepted_at": { "type": "string" },
+    "portal_first_seen_at": { "type": "string" },
+    "portal_last_seen_at": { "type": "string" },
+    "promo_claimed_at": { "type": "string" },
+    "selected_photo_ids": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": []
+    },
+    "photos_folder_id": { "type": "string" }
+  },
+  "required": ["email", "display_name", "team_key", "team_name", "mentor_key", "checked_in"],
+  "rls": {
+    "create": { "user_condition": { "role": "admin" } },
+    "read": { "user_condition": { "role": "admin" } },
+    "update": { "user_condition": { "role": "admin" } },
+    "delete": { "user_condition": { "role": "admin" } }
+  }
+}

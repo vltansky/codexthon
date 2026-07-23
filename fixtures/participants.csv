@@ -1,0 +1,7 @@
+Email,Name,Team,Mentor,Mentor Email,Mentor Phone,Mentor Details
+ada@example.test,Ada Lovelace,Compiler Crew,Grace Hopper,grace.mentor@example.test,+972-50-000-0101,Find Grace near the mentor lounge.
+alan@example.test,Alan Turing,Compiler Crew,Grace Hopper,grace.mentor@example.test,+972-50-000-0101,Find Grace near the mentor lounge.
+linus@example.test,Linus Torvalds,Kernel Collective,Radia Perlman,radia.mentor@example.test,+972-50-000-0102,Radia is available beside the main stage.
+margaret@example.test,Margaret Hamilton,Kernel Collective,Radia Perlman,radia.mentor@example.test,+972-50-000-0102,Radia is available beside the main stage.
+barbara@example.test,Barbara Liskov,Interface Lab,James Gosling,james.mentor@example.test,+972-50-000-0103,James is hosting office hours after lunch.
+donald@example.test,Donald Knuth,Interface Lab,James Gosling,james.mentor@example.test,+972-50-000-0103,James is hosting office hours after lunch.

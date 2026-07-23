@@ -1,0 +1,23 @@
+dist/
+dist-worker/
+node_modules/
+.playwright-mcp/
+outputs/
+
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+*.local
+
+# Generated exports and traces
+*.csv
+!fixtures/*.csv
+*.xlsx
+*.xls
+*.ndjson
+*.log
+.DS_Store
+
+# Privacy-sensitive local experiments
+/poc/face-grouping/

@@ -1,0 +1,25 @@
+{
+  "name": "AccessDeliveryAttempt",
+  "description": "Append-only audit record for participant access-link email attempts",
+  "type": "object",
+  "properties": {
+    "participant_id": { "type": "string" },
+    "participant_email": { "type": "string", "format": "email" },
+    "access_version": { "type": "integer" },
+    "action": { "type": "string", "enum": ["send", "retry", "resend"] },
+    "request_id": { "type": "string" },
+    "attempt_key": { "type": "string" },
+    "status": { "type": "string", "enum": ["pending", "accepted", "failed", "unknown", "skipped"] },
+    "provider_message_id": { "type": "string" },
+    "error_code": { "type": "string" },
+    "actor_email": { "type": "string", "format": "email" },
+    "attempted_at": { "type": "string" }
+  },
+  "required": ["participant_id", "participant_email", "access_version", "action", "request_id", "attempt_key", "status", "actor_email", "attempted_at"],
+  "rls": {
+    "create": { "user_condition": { "role": "admin" } },
+    "read": { "user_condition": { "role": "admin" } },
+    "update": { "user_condition": { "role": "admin" } },
+    "delete": { "user_condition": { "role": "admin" } }
+  }
+}

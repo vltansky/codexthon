@@ -1,0 +1,21 @@
+{
+  "name": "Mentor",
+  "description": "Mentor contact and event guidance",
+  "type": "object",
+  "properties": {
+    "mentor_key": { "type": "string" },
+    "display_name": { "type": "string" },
+    "email": { "type": "string", "format": "email" },
+    "phone": { "type": "string" },
+    "details": { "type": "string" },
+    "linkedin": { "type": "string", "format": "uri" },
+    "invited_at": { "type": "string" }
+  },
+  "required": ["mentor_key", "display_name"],
+  "rls": {
+    "create": { "user_condition": { "role": "admin" } },
+    "read": { "user_condition": { "role": "admin" } },
+    "update": { "user_condition": { "role": "admin" } },
+    "delete": { "user_condition": { "role": "admin" } }
+  }
+}

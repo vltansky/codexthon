@@ -1,0 +1,21 @@
+{
+  "name": "PromoCode",
+  "description": "Unique Codex and API credit link pair assigned exactly once after check-in",
+  "type": "object",
+  "properties": {
+    "code": { "type": "string" },
+    "codex_credit_url": { "type": "string", "format": "uri" },
+    "api_credit_url": { "type": "string", "format": "uri" },
+    "api_credit_code": { "type": "string" },
+    "assigned_email": { "type": "string" },
+    "assigned_at": { "type": "string" },
+    "blocked": { "type": "boolean", "default": false }
+  },
+  "required": ["code", "assigned_email"],
+  "rls": {
+    "create": { "user_condition": { "role": "admin" } },
+    "read": { "user_condition": { "role": "admin" } },
+    "update": { "user_condition": { "role": "admin" } },
+    "delete": { "user_condition": { "role": "admin" } }
+  }
+}

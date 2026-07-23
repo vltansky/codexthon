@@ -1,0 +1,26 @@
+{
+  "name": "EventSettings",
+  "description": "Participant-facing event content",
+  "type": "object",
+  "properties": {
+    "event_name": { "type": "string" },
+    "event_url": { "type": "string", "format": "uri" },
+    "wifi_network": { "type": "string" },
+    "wifi_password": { "type": "string" },
+    "wifi_network_secondary": { "type": "string" },
+    "wifi_password_secondary": { "type": "string" },
+    "event_details": { "type": "string" },
+    "agenda": { "type": "string" },
+    "questions_and_answers": { "type": "string" },
+    "promo_instructions": { "type": "string" },
+    "partner_coupon_code": { "type": "string" },
+    "partner_registration_url": { "type": "string", "format": "uri" }
+  },
+  "required": ["event_name"],
+  "rls": {
+    "create": { "user_condition": { "role": "admin" } },
+    "read": { "user_condition": { "role": "admin" } },
+    "update": { "user_condition": { "role": "admin" } },
+    "delete": { "user_condition": { "role": "admin" } }
+  }
+}

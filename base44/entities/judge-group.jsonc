@@ -1,0 +1,20 @@
+{
+  "name": "JudgeGroup",
+  "description": "Judging panel of mentors and judges assigned to teams",
+  "type": "object",
+  "properties": {
+    "group_key": { "type": "string" },
+    "name": { "type": "string" },
+    "details": { "type": "string" },
+    "mentor_keys": { "type": "array", "items": { "type": "string" } },
+    "judge_keys": { "type": "array", "items": { "type": "string" } },
+    "team_keys": { "type": "array", "items": { "type": "string" } }
+  },
+  "required": ["group_key", "name"],
+  "rls": {
+    "create": { "user_condition": { "role": "admin" } },
+    "read": { "user_condition": { "role": "admin" } },
+    "update": { "user_condition": { "role": "admin" } },
+    "delete": { "user_condition": { "role": "admin" } }
+  }
+}

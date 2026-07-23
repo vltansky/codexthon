@@ -1,0 +1,17 @@
+{
+  "name": "TeamInfo",
+  "description": "Admin-managed team metadata such as the assigned table",
+  "type": "object",
+  "properties": {
+    "team_key": { "type": "string" },
+    "table_number": { "type": "string" },
+    "note": { "type": "string" }
+  },
+  "required": ["team_key"],
+  "rls": {
+    "create": { "user_condition": { "role": "admin" } },
+    "read": { "user_condition": { "role": "admin" } },
+    "update": { "user_condition": { "role": "admin" } },
+    "delete": { "user_condition": { "role": "admin" } }
+  }
+}
