@@ -1,4 +1,4 @@
-import { bilinearSample, type Rgba } from "./imaging.ts";
+import { bilinearSample, type Rgba } from "./imaging";
 
 // Canonical ArcFace 112x112 landmark template (left eye, right eye, nose, mouth corners).
 const template: [number, number][] = [
@@ -25,17 +25,17 @@ function estimateSimilarity(source: [number, number][], target: [number, number]
   const count = source.length;
   let sourceMeanX = 0, sourceMeanY = 0, targetMeanX = 0, targetMeanY = 0;
   for (let i = 0; i < count; i++) {
-    sourceMeanX += source[i][0] / count;
-    sourceMeanY += source[i][1] / count;
-    targetMeanX += target[i][0] / count;
-    targetMeanY += target[i][1] / count;
+    sourceMeanX += source[i]![0] / count;
+    sourceMeanY += source[i]![1] / count;
+    targetMeanX += target[i]![0] / count;
+    targetMeanY += target[i]![1] / count;
   }
   let crossSum = 0, dotSum = 0, normSum = 0;
   for (let i = 0; i < count; i++) {
-    const sx = source[i][0] - sourceMeanX;
-    const sy = source[i][1] - sourceMeanY;
-    const tx = target[i][0] - targetMeanX;
-    const ty = target[i][1] - targetMeanY;
+    const sx = source[i]![0] - sourceMeanX;
+    const sy = source[i]![1] - sourceMeanY;
+    const tx = target[i]![0] - targetMeanX;
+    const ty = target[i]![1] - targetMeanY;
     dotSum += sx * tx + sy * ty;
     crossSum += sx * ty - sy * tx;
     normSum += sx * sx + sy * sy;
@@ -76,9 +76,9 @@ export function embeddingTensorData(aligned: Rgba): Float32Array {
   const planeSize = alignedSize * alignedSize;
   const tensorData = new Float32Array(3 * planeSize);
   for (let i = 0; i < planeSize; i++) {
-    tensorData[i] = (aligned.data[i * 4] - 127.5) / 127.5;
-    tensorData[planeSize + i] = (aligned.data[i * 4 + 1] - 127.5) / 127.5;
-    tensorData[planeSize * 2 + i] = (aligned.data[i * 4 + 2] - 127.5) / 127.5;
+    tensorData[i] = (aligned.data[i * 4]! - 127.5) / 127.5;
+    tensorData[planeSize + i] = (aligned.data[i * 4 + 1]! - 127.5) / 127.5;
+    tensorData[planeSize * 2 + i] = (aligned.data[i * 4 + 2]! - 127.5) / 127.5;
   }
   return tensorData;
 }
@@ -88,6 +88,6 @@ export function normalizeEmbedding(raw: Float32Array): Float32Array {
   for (const value of raw) norm += value * value;
   norm = Math.sqrt(norm);
   const normalized = new Float32Array(raw.length);
-  for (let i = 0; i < raw.length; i++) normalized[i] = raw[i] / norm;
+  for (let i = 0; i < raw.length; i++) normalized[i] = raw[i]! / norm;
   return normalized;
 }

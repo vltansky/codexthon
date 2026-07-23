@@ -38,6 +38,11 @@
       "items": { "type": "string" },
       "default": []
     },
+    "claimed_cluster_keys": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": []
+    },
     "photos_folder_id": { "type": "string" }
   },
   "required": ["email", "display_name", "team_key", "team_name", "mentor_key", "checked_in"],

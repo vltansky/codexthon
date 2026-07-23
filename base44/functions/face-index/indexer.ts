@@ -1,18 +1,11 @@
-import { alignFace, alignedSize, embeddingTensorData, normalizeEmbedding } from "./align.ts";
-import { fetchThumbnail, listIndexablePhotos, type IndexablePhoto } from "./drive.ts";
-import { decodeJpeg } from "./imaging.ts";
-import { faceSessions, ort } from "./models.ts";
-import { decodeDetections, preprocessForDetection } from "./scrfd.ts";
+import { listIndexablePhotos, type IndexablePhoto } from "./drive.ts";
 
 // Threshold calibrated for buffalo_s embeddings (POC on 194 real event photos:
 // same-person cross-photo cosine ~0.71, strangers well below 0.5).
 const similarityThreshold = 0.5;
-const detectionThreshold = 0.5;
-export const defaultBatchSize = 6;
-export const maximumBatchSize = 20;
-// Stop picking up new photos once an invocation runs this long; the admin UI
-// keeps calling "run" until remaining is 0.
-const invocationBudgetMs = 40_000;
+const embeddingLength = 512;
+const maximumFacesPerPhoto = 60;
+const pendingBatchLimit = 25;
 const entityPageSize = 2000;
 
 interface IndexedFace {
@@ -30,22 +23,26 @@ interface IndexRecord {
   faces?: IndexedFace[];
 }
 
-interface KnownFace {
-  clusterKey: string;
-  embedding: Float32Array;
+export interface IngestFacePayload {
+  score?: unknown;
+  box?: unknown;
+  embedding?: unknown;
 }
 
-export interface IndexStatus {
-  totalPhotos: number;
-  indexedPhotos: number;
-  remainingPhotos: number;
-  faceCount: number;
-  clusterCount: number;
+// Module-level cache so the thumbnail proxy does not re-list Drive per photo.
+let photoCache: { photos: IndexablePhoto[]; fetchedAt: number } | null = null;
+const photoCacheTtlMs = 5 * 60_000;
+
+async function cachedPhotos(base44: any): Promise<IndexablePhoto[]> {
+  if (photoCache && performance.now() - photoCache.fetchedAt < photoCacheTtlMs) return photoCache.photos;
+  const photos = await listIndexablePhotos(await driveAccessToken(base44));
+  photoCache = { photos, fetchedAt: performance.now() };
+  return photos;
 }
 
-export async function indexStatus(base44: any): Promise<IndexStatus> {
+export async function indexStatus(base44: any) {
   const [photos, records, clusters] = await Promise.all([
-    listIndexablePhotos(await driveAccessToken(base44)),
+    cachedPhotos(base44),
     listIndexRecords(base44),
     base44.asServiceRole.entities.FaceCluster.filter({}, undefined, entityPageSize),
   ]);
@@ -60,60 +57,83 @@ export async function indexStatus(base44: any): Promise<IndexStatus> {
   };
 }
 
-export interface IndexRunResult {
-  indexedNow: number;
-  facesAdded: number;
-  remainingPhotos: number;
-  clusterCount: number;
-  skippedPhotos: string[];
-  tookMs: number;
-}
-
-export async function runIndexBatch(base44: any, requestedBatchSize: unknown): Promise<IndexRunResult> {
-  const startedAt = performance.now();
-  const batchSize = clampBatchSize(requestedBatchSize);
-  const accessToken = await driveAccessToken(base44);
-  const [photos, records, sessions] = await Promise.all([
-    listIndexablePhotos(accessToken),
-    listIndexRecords(base44),
-    faceSessions(),
-  ]);
-
+export async function pendingPhotos(base44: any) {
+  const [photos, records] = await Promise.all([cachedPhotos(base44), listIndexRecords(base44)]);
   const indexedIds = new Set(records.map(({ photo_id }) => photo_id));
   const pending = photos.filter(({ id }) => !indexedIds.has(id));
-  const batch = pending.slice(0, batchSize);
+  return {
+    photos: pending.slice(0, pendingBatchLimit).map(({ id, name, thumbnailUrl }) => ({ id, name, thumbnailUrl })),
+    remainingPhotos: pending.length,
+  };
+}
 
-  const knownFaces: KnownFace[] = records.flatMap((record) =>
-    (record.faces ?? []).map((face) => ({ clusterKey: face.cluster_key, embedding: Float32Array.from(face.embedding) }))
-  );
+// Returns the thumbnail as base64 JSON because the SDK's invoke() only
+// carries JSON; used when the browser cannot fetch Drive thumbnails directly.
+export async function proxyThumbnail(base44: any, photoId: unknown) {
+  if (typeof photoId !== "string") throw new Error("Unknown photo");
+  const photos = await cachedPhotos(base44);
+  const photo = photos.find(({ id }) => id === photoId);
+  if (!photo) throw new Error("Unknown photo");
+  const upstream = await fetch(photo.thumbnailUrl);
+  if (!upstream.ok) throw new Error("Thumbnail unavailable");
+  const bytes = new Uint8Array(await upstream.arrayBuffer());
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
+  }
+  return { base64: btoa(binary), contentType: upstream.headers.get("content-type") ?? "image/jpeg" };
+}
 
-  let indexedNow = 0;
-  let facesAdded = 0;
-  const skippedPhotos: string[] = [];
-  const touchedClusterKeys = new Set<string>();
+export async function ingestPhoto(base44: any, body: { photoId?: unknown; photoName?: unknown; faces?: unknown }) {
+  const photoId = body.photoId;
+  if (typeof photoId !== "string" || !photoId) throw new Error("photoId is required");
+  const photoName = typeof body.photoName === "string" ? body.photoName : "";
+  const faces = parseFaces(body.faces, photoId);
 
-  for (const photo of batch) {
-    if (performance.now() - startedAt > invocationBudgetMs) break;
-    const record = await indexPhoto(photo, sessions, knownFaces);
-    if (!record) {
-      skippedPhotos.push(photo.name);
-      continue;
-    }
-    await base44.asServiceRole.entities.PhotoFaceIndex.create(record);
-    records.push(record);
-    indexedNow++;
-    facesAdded += record.faces.length;
-    for (const face of record.faces) touchedClusterKeys.add(face.cluster_key);
+  const records = await listIndexRecords(base44);
+  if (records.some((record) => record.photo_id === photoId)) {
+    return { alreadyIndexed: true, faceCount: 0, clusterCount: undefined };
   }
 
+  const knownFaces = records.flatMap((record) =>
+    (record.faces ?? []).map((face) => ({ clusterKey: face.cluster_key, embedding: Float32Array.from(face.embedding) }))
+  );
+  const touchedClusterKeys = new Set<string>();
+  for (const face of faces) {
+    face.cluster_key = assignCluster(Float32Array.from(face.embedding), knownFaces);
+    knownFaces.push({ clusterKey: face.cluster_key, embedding: Float32Array.from(face.embedding) });
+    touchedClusterKeys.add(face.cluster_key);
+  }
+
+  const record = { photo_id: photoId, photo_name: photoName, indexed_at: new Date().toISOString(), faces };
+  await base44.asServiceRole.entities.PhotoFaceIndex.create(record);
+  records.push(record);
   const clusterCount = await upsertClusters(base44, records, touchedClusterKeys);
+  return { alreadyIndexed: false, faceCount: faces.length, clusterCount };
+}
+
+export async function listClusters(base44: any) {
+  const [photos, clusters] = await Promise.all([
+    cachedPhotos(base44),
+    base44.asServiceRole.entities.FaceCluster.filter({}, undefined, entityPageSize),
+  ]);
+  const photoById = new Map(photos.map((photo) => [photo.id, photo]));
   return {
-    indexedNow,
-    facesAdded,
-    remainingPhotos: pending.length - indexedNow - skippedPhotos.length,
-    clusterCount,
-    skippedPhotos,
-    tookMs: Math.round(performance.now() - startedAt),
+    clusters: clusters
+      .filter((cluster: any) => cluster.hidden !== true)
+      .toSorted((first: any, second: any) => (second.face_count ?? 0) - (first.face_count ?? 0))
+      .map((cluster: any) => {
+        const cover = photoById.get(cluster.cover_photo_id);
+        return {
+          clusterKey: cluster.cluster_key,
+          faceCount: cluster.face_count ?? 0,
+          photoIds: cluster.photo_ids ?? [],
+          coverBox: cluster.cover_box ?? [],
+          coverThumbnailUrl: cover?.thumbnailUrl ?? "",
+          coverAspect: cover && cover.height > 0 ? cover.width / cover.height : 1.5,
+        };
+      }),
   };
 }
 
@@ -131,66 +151,33 @@ export async function resetIndex(base44: any): Promise<{ deletedRecords: number;
   return { deletedRecords: records.length, deletedClusters: clusters.length };
 }
 
-async function indexPhoto(
-  photo: IndexablePhoto,
-  sessions: Awaited<ReturnType<typeof faceSessions>>,
-  knownFaces: KnownFace[],
-): Promise<(IndexRecord & { faces: IndexedFace[]; indexed_at: string }) | null> {
-  const thumbnailBytes = await fetchThumbnail(photo.thumbnailUrl);
-  // Transient fetch failures skip the photo so a later run retries it.
-  if (!thumbnailBytes) return null;
-
-  let faces: IndexedFace[];
-  try {
-    faces = await detectAndEmbed(thumbnailBytes, sessions, knownFaces, photo.id);
-  } catch (error) {
-    // Deterministic decode/inference failures record an empty index entry so
-    // the photo is not retried forever.
-    console.error(`face-index: could not process ${photo.name}: ${error}`);
-    faces = [];
-  }
-  return { photo_id: photo.id, photo_name: photo.name, indexed_at: new Date().toISOString(), faces };
-}
-
-async function detectAndEmbed(
-  imageBytes: Uint8Array,
-  sessions: Awaited<ReturnType<typeof faceSessions>>,
-  knownFaces: KnownFace[],
-  photoId: string,
-): Promise<IndexedFace[]> {
-  const image = decodeJpeg(imageBytes);
-  const detectionInput = preprocessForDetection(image);
-  const detectionOutput = await sessions.detector.run({
-    [sessions.detector.inputNames[0]]: new ort.Tensor("float32", detectionInput.tensorData, [1, 3, detectionInput.size, detectionInput.size]),
-  });
-  const detections = decodeDetections(
-    sessions.detector.outputNames.map((name: string) => detectionOutput[name] as { dims: readonly number[]; data: Float32Array }),
-    detectionInput,
-    detectionThreshold,
-  );
-
-  const faces: IndexedFace[] = [];
-  for (const [faceIndex, detection] of detections.entries()) {
-    const aligned = alignFace(image, detection.keypoints);
-    const embeddingOutput = await sessions.recognizer.run({
-      [sessions.recognizer.inputNames[0]]: new ort.Tensor("float32", embeddingTensorData(aligned), [1, 3, alignedSize, alignedSize]),
-    });
-    const embedding = normalizeEmbedding((embeddingOutput[sessions.recognizer.outputNames[0]] as { data: Float32Array }).data);
-
-    const clusterKey = assignCluster(embedding, knownFaces);
-    knownFaces.push({ clusterKey, embedding });
-    faces.push({
+function parseFaces(payload: unknown, photoId: string): IndexedFace[] {
+  if (payload === undefined || payload === null) return [];
+  if (!Array.isArray(payload) || payload.length > maximumFacesPerPhoto) throw new Error("Face payload is invalid");
+  return payload.map((face: IngestFacePayload, faceIndex) => {
+    const box = face.box;
+    const embedding = face.embedding;
+    if (
+      !Array.isArray(box) || box.length !== 4 || !box.every(isUnitNumber) ||
+      !Array.isArray(embedding) || embedding.length !== embeddingLength ||
+      !embedding.every((value) => typeof value === "number" && Number.isFinite(value))
+    ) {
+      throw new Error("Face payload is invalid");
+    }
+    const norm = Math.sqrt(embedding.reduce((sum: number, value: number) => sum + value * value, 0));
+    if (Math.abs(norm - 1) > 0.05) throw new Error("Face embedding must be L2-normalized");
+    const score = typeof face.score === "number" && Number.isFinite(face.score) ? clamp01(face.score) : 0;
+    return {
       face_id: `${photoId}_${faceIndex}`,
-      cluster_key: clusterKey,
-      score: round(detection.score, 100),
-      box: relativeBox(detection.box, image.width, image.height),
-      embedding: [...embedding].map((value) => round(value, 1e4)),
-    });
-  }
-  return faces;
+      cluster_key: "",
+      score: round(score, 100),
+      box: box.map((value: number) => round(value, 1e4)),
+      embedding: embedding.map((value: number) => round(value, 1e4)),
+    };
+  });
 }
 
-function assignCluster(embedding: Float32Array, knownFaces: KnownFace[]): string {
+function assignCluster(embedding: Float32Array, knownFaces: { clusterKey: string; embedding: Float32Array }[]): string {
   let bestSimilarity = similarityThreshold;
   let bestClusterKey = "";
   for (const known of knownFaces) {
@@ -239,8 +226,8 @@ async function driveAccessToken(base44: any): Promise<string> {
   return accessToken;
 }
 
-function relativeBox(box: [number, number, number, number], width: number, height: number): number[] {
-  return [box[0] / width, box[1] / height, box[2] / width, box[3] / height].map((value) => round(clamp01(value), 1e4));
+function isUnitNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1;
 }
 
 function clamp01(value: number): number {
@@ -249,9 +236,4 @@ function clamp01(value: number): number {
 
 function round(value: number, precision: number): number {
   return Math.round(value * precision) / precision;
-}
-
-function clampBatchSize(batchSize: unknown): number {
-  if (typeof batchSize !== "number" || !Number.isInteger(batchSize) || batchSize < 1) return defaultBatchSize;
-  return Math.min(batchSize, maximumBatchSize);
 }

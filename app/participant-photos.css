@@ -126,3 +126,24 @@
   .participant-photo img { transition: none; }
   .photos-loader { animation: none; }
 }
+
+.people-hint { max-width: 620px; margin: -8px 0 28px; color: #a8adb3; font-size: 14px; }
+
+.people-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 20px 14px; }
+.person-card { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.person-card-face { position: relative; display: block; aspect-ratio: 1; overflow: hidden; border-radius: 14px; background-color: #171a1f; background-repeat: no-repeat; transition: transform 200ms cubic-bezier(.2, .8, .2, 1), filter 200ms ease; filter: saturate(.85); }
+.person-card-face:hover { transform: scale(1.03); filter: saturate(1); }
+.person-card.claimed .person-card-face { outline: 2px solid #78a7ff; outline-offset: 2px; }
+.person-card-flag { position: absolute; top: 8px; left: 8px; display: inline-flex; align-items: center; gap: 4px; border-radius: 999px; padding: 3px 8px; background: #78a7ff; color: #05070a; font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.person-card-count { position: absolute; right: 8px; bottom: 8px; border-radius: 999px; padding: 3px 8px; background: rgba(0, 0, 0, .55); color: rgba(255, 255, 255, .92); font-size: 10px; font-weight: 700; backdrop-filter: blur(4px); }
+.person-card-claim { display: inline-flex; align-items: center; justify-content: center; gap: 5px; width: 100%; border: 1px solid #3a3a3a; border-radius: 999px; padding: 7px 8px; background: transparent; color: #b5bac0; font-size: 11.5px; font-weight: 600; white-space: nowrap; transition: border-color 150ms ease, color 150ms ease, background 150ms ease; }
+.person-card-claim:hover:not(:disabled) { border-color: #78a7ff; color: #fff; }
+.person-card-claim[aria-pressed="true"] { border-color: #78a7ff; background: rgba(120, 167, 255, .16); color: #78a7ff; }
+.person-card-claim:disabled { color: #6b7077; cursor: wait; }
+
+.person-claim-button { display: inline-flex; align-items: center; gap: 8px; margin-top: 20px; border: 1px solid #f4f1e8; border-radius: 999px; padding: 10px 18px; background: transparent; color: #f4f1e8; font-size: 13px; font-weight: 700; }
+.person-claim-button:hover:not(:disabled) { border-color: #78a7ff; background: #78a7ff; color: #05070a; }
+.person-claim-button.claimed { border-color: #78a7ff; background: rgba(120, 167, 255, .16); color: #78a7ff; }
+.person-claim-button:disabled { border-color: #42464d; color: #6b7077; cursor: wait; }
+
+.participant-photo-you { position: absolute; z-index: 1; top: 18px; right: 58px; display: inline-flex; align-items: center; gap: 4px; border-radius: 999px; padding: 4px 9px; background: rgba(120, 167, 255, .92); color: #05070a; font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }

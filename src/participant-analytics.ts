@@ -1,5 +1,5 @@
 export type ParticipantAccessMode = "authenticated" | "signed_link";
-export type ParticipantPhotosView = "all" | "mine";
+export type ParticipantPhotosView = "all" | "mine" | "people" | "person";
 export type ParticipantAnalyticsArea = "agent_setup" | "photos" | "promo" | "wifi";
 export type ParticipantAnalyticsTarget =
   | "api"
@@ -24,9 +24,11 @@ export type ParticipantCompletedAction =
   | "apply_clicked"
   | "copy_succeeded"
   | "folder_exported"
+  | "face_claimed"
+  | "face_unclaimed"
   | "folder_opened"
   | "selection_saved";
-export type ParticipantFailedAction = "copy" | "folder_export" | "selection_save";
+export type ParticipantFailedAction = "copy" | "face_claim" | "folder_export" | "selection_save";
 export type ParticipantErrorCategory = "clipboard_unavailable" | "service_unavailable";
 
 export type ParticipantPageViewInput =

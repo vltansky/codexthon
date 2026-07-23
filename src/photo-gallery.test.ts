@@ -13,6 +13,9 @@ test("builds refresh-safe photo page paths with the page in the query string", (
   assert.equal(photosPagePath("all", 1), "/photos");
   assert.equal(photosPagePath("all", 3), "/photos?page=3");
   assert.equal(photosPagePath("mine", 2), "/photos/mine?page=2");
+  assert.equal(photosPagePath("people"), "/photos/people");
+  assert.equal(photosPagePath("person", 1, "person_abc"), "/photos/people/person_abc");
+  assert.equal(photosPagePath("person", 3, "person_abc"), "/photos/people/person_abc?page=3");
 });
 
 test("parses photo routes back from pathname and search", () => {
@@ -21,6 +24,8 @@ test("parses photo routes back from pathname and search", () => {
   assert.deepEqual(parsePhotosRoute("/photos/mine", "?page=2"), { view: "mine", page: 2 });
   assert.deepEqual(parsePhotosRoute("/photos", "?page=trash"), { view: "all", page: 1 });
   assert.deepEqual(parsePhotosRoute("/photos", "?page=-2"), { view: "all", page: 1 });
+  assert.deepEqual(parsePhotosRoute("/photos/people", ""), { view: "people", page: 1 });
+  assert.deepEqual(parsePhotosRoute("/photos/people/person_abc", "?page=2"), { view: "person", page: 2, clusterKey: "person_abc" });
   assert.equal(parsePhotosRoute("/", ""), null);
   assert.equal(parsePhotosRoute("/admin", "?page=2"), null);
 });

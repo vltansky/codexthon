@@ -1,5 +1,3 @@
-import { resize, type Rgba } from "./imaging.ts";
-
 // SCRFD decode ported from insightface's python reference implementation:
 // strides 8/16/32, two anchors per cell, distance-encoded boxes and keypoints.
 const strides = [8, 16, 32];
@@ -11,30 +9,9 @@ export interface DetectedFace {
   keypoints: [number, number][];
 }
 
-export interface DetectionInput {
-  tensorData: Float32Array;
+export interface DetectionGeometry {
   size: number;
   scale: number;
-}
-
-export function preprocessForDetection(img: Rgba, size = 640): DetectionInput {
-  const scale = Math.min(size / img.width, size / img.height);
-  const scaledWidth = Math.round(img.width * scale);
-  const scaledHeight = Math.round(img.height * scale);
-  const scaled = resize(img, scaledWidth, scaledHeight);
-
-  const tensorData = new Float32Array(3 * size * size);
-  const planeSize = size * size;
-  for (let y = 0; y < scaledHeight; y++) {
-    for (let x = 0; x < scaledWidth; x++) {
-      const source = (y * scaledWidth + x) * 4;
-      const target = y * size + x;
-      tensorData[target] = (scaled.data[source] - 127.5) / 128;
-      tensorData[planeSize + target] = (scaled.data[source + 1] - 127.5) / 128;
-      tensorData[planeSize * 2 + target] = (scaled.data[source + 2] - 127.5) / 128;
-    }
-  }
-  return { tensorData, size, scale };
 }
 
 interface OutputTensor {
@@ -44,35 +21,35 @@ interface OutputTensor {
 
 export function decodeDetections(
   outputs: OutputTensor[],
-  input: DetectionInput,
+  geometry: DetectionGeometry,
   scoreThreshold = 0.5,
   iouThreshold = 0.4,
 ): DetectedFace[] {
   const candidates: DetectedFace[] = [];
   for (const [strideIndex, stride] of strides.entries()) {
-    const scores = outputs[strideIndex].data;
-    const boxes = outputs[strideIndex + 3].data;
-    const keypoints = outputs[strideIndex + 6].data;
-    const cells = input.size / stride;
+    const scores = outputs[strideIndex]!.data;
+    const boxes = outputs[strideIndex + 3]!.data;
+    const keypoints = outputs[strideIndex + 6]!.data;
+    const cells = geometry.size / stride;
     for (let cellY = 0; cellY < cells; cellY++) {
       for (let cellX = 0; cellX < cells; cellX++) {
         for (let anchor = 0; anchor < anchorsPerCell; anchor++) {
           const index = (cellY * cells + cellX) * anchorsPerCell + anchor;
-          const score = scores[index];
+          const score = scores[index]!;
           if (score < scoreThreshold) continue;
           const centerX = cellX * stride;
           const centerY = cellY * stride;
           const box: [number, number, number, number] = [
-            (centerX - boxes[index * 4] * stride) / input.scale,
-            (centerY - boxes[index * 4 + 1] * stride) / input.scale,
-            (centerX + boxes[index * 4 + 2] * stride) / input.scale,
-            (centerY + boxes[index * 4 + 3] * stride) / input.scale,
+            (centerX - boxes[index * 4]! * stride) / geometry.scale,
+            (centerY - boxes[index * 4 + 1]! * stride) / geometry.scale,
+            (centerX + boxes[index * 4 + 2]! * stride) / geometry.scale,
+            (centerY + boxes[index * 4 + 3]! * stride) / geometry.scale,
           ];
           const points: [number, number][] = [];
           for (let point = 0; point < 5; point++) {
             points.push([
-              (centerX + keypoints[index * 10 + point * 2] * stride) / input.scale,
-              (centerY + keypoints[index * 10 + point * 2 + 1] * stride) / input.scale,
+              (centerX + keypoints[index * 10 + point * 2]! * stride) / geometry.scale,
+              (centerY + keypoints[index * 10 + point * 2 + 1]! * stride) / geometry.scale,
             ]);
           }
           candidates.push({ score, box, keypoints: points });

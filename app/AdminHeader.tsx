@@ -1,7 +1,7 @@
 import { base44 } from "./base44Client";
 import type { AppUser } from "./types";
 
-export type AdminPage = "desk" | "mentors" | "judging" | "teams" | "codes" | "content";
+export type AdminPage = "desk" | "mentors" | "judging" | "teams" | "codes" | "content" | "faces";
 
 export function AdminHeader({
   activePage,
@@ -25,6 +25,7 @@ export function AdminHeader({
         <button aria-current={activePage === "teams" ? "page" : undefined} onClick={() => onNavigate("teams")}>Teams</button>
         <button aria-current={activePage === "codes" ? "page" : undefined} onClick={() => onNavigate("codes")}>Codes</button>
         <button aria-current={activePage === "content" ? "page" : undefined} onClick={() => onNavigate("content")}>Content</button>
+        <button aria-current={activePage === "faces" ? "page" : undefined} onClick={() => onNavigate("faces")}>Faces</button>
       </nav>
     </>
   );
@@ -36,5 +37,6 @@ function pageTitle(page: AdminPage) {
   if (page === "teams") return "Teams";
   if (page === "codes") return "Promo codes";
   if (page === "content") return "Event content";
+  if (page === "faces") return "Photo people";
   return "Hackathon desk";
 }

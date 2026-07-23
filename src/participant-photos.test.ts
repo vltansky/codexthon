@@ -15,11 +15,15 @@ interface ServiceModule {
     pageCount: number;
     totalCount: number;
     selectedPhotoIds: string[];
+    matchedPhotoIds: string[];
+    claimedClusterKeys: string[];
     photosFolderLink: string | null;
     sourceFolderLink: string;
   }>;
   saveParticipantPhotoSelection(base44: unknown, participant: unknown, selection: unknown, fetcher: typeof fetch): Promise<{ selectedPhotoIds: string[] }>;
   exportParticipantPhotosFolder(base44: unknown, participant: unknown, fetcher: typeof fetch): Promise<{ folderLink: string; photoCount: number }>;
+  listPeopleClusters(base44: unknown, participant: unknown, fetcher: typeof fetch): Promise<{ people: Array<{ clusterKey: string; photoCount: number; claimed: boolean }>; claimedClusterKeys: string[] }>;
+  claimFaceCluster(base44: unknown, participant: unknown, clusterKey: unknown, claimed: boolean): Promise<{ claimedClusterKeys: string[] }>;
 }
 
 interface RecordedRequest {
@@ -145,11 +149,14 @@ function driveFile(index: number) {
   };
 }
 
-function fakeBase44(updates: unknown[] = []) {
+function fakeBase44(updates: unknown[] = [], clusters?: unknown[]) {
   return {
     asServiceRole: {
       connectors: { getConnection: async () => ({ accessToken: "drive-token" }) },
-      entities: { Participant: { update: async (_id: string, data: unknown) => updates.push(data) } },
+      entities: {
+        Participant: { update: async (_id: string, data: unknown) => updates.push(data) },
+        ...(clusters ? { FaceCluster: { filter: async () => clusters } } : {}),
+      },
     },
   };
 }
@@ -269,4 +276,115 @@ test("rejects additions that do not live in the event folder", async () => {
     /event folder/i,
   );
   assert.deepEqual(updates, []);
+});
+
+test("mine view unions manual selections with claimed face-group matches", async () => {
+  const { listParticipantPhotos } = await import(serviceModuleUrl) as ServiceModule;
+  const clusters = [
+    { cluster_key: "person_a", photo_ids: ["photo-2", "photo-3", "gone-photo"], hidden: false },
+    { cluster_key: "person_b", photo_ids: ["photo-4"], hidden: false },
+  ];
+  const result = await listParticipantPhotos(
+    fakeBase44([], clusters),
+    { id: "participant-1", selected_photo_ids: ["photo-1"], claimed_cluster_keys: ["person_a"] },
+    { view: "mine" },
+    listFetcher(5),
+  );
+
+  assert.deepEqual(result.photos.map(({ id }) => id).toSorted(), ["photo-1", "photo-2", "photo-3"]);
+  assert.deepEqual(result.matchedPhotoIds.toSorted(), ["photo-2", "photo-3"]);
+  assert.deepEqual(result.selectedPhotoIds, ["photo-1"]);
+  assert.deepEqual(result.claimedClusterKeys, ["person_a"]);
+});
+
+test("person view lists only the photos of one visible face group", async () => {
+  const { listParticipantPhotos } = await import(serviceModuleUrl) as ServiceModule;
+  const clusters = [
+    { cluster_key: "person_a", photo_ids: ["photo-2", "photo-5"], hidden: false },
+    { cluster_key: "person_hidden", photo_ids: ["photo-3"], hidden: true },
+  ];
+  const result = await listParticipantPhotos(
+    fakeBase44([], clusters),
+    { id: "participant-1", selected_photo_ids: [] },
+    { view: "person", clusterKey: "person_a" },
+    listFetcher(5),
+  );
+  assert.deepEqual(result.photos.map(({ id }) => id).toSorted(), ["photo-2", "photo-5"]);
+
+  const hidden = await listParticipantPhotos(
+    fakeBase44([], clusters),
+    { id: "participant-1", selected_photo_ids: [] },
+    { view: "person", clusterKey: "person_hidden" },
+    listFetcher(5),
+  );
+  assert.deepEqual(hidden.photos, []);
+});
+
+test("people listing marks claimed groups and drops empty or hidden ones", async () => {
+  const { listPeopleClusters } = await import(serviceModuleUrl) as ServiceModule;
+  const clusters = [
+    { cluster_key: "person_a", face_count: 3, photo_ids: ["photo-1", "photo-2"], cover_photo_id: "photo-1", cover_box: [0.1, 0.1, 0.2, 0.3], hidden: false },
+    { cluster_key: "person_b", face_count: 9, photo_ids: ["photo-3", "photo-4", "photo-5"], cover_photo_id: "photo-3", cover_box: [0, 0, 1, 1], hidden: false },
+    { cluster_key: "person_hidden", face_count: 5, photo_ids: ["photo-1"], cover_photo_id: "photo-1", cover_box: [], hidden: true },
+    { cluster_key: "person_gone", face_count: 2, photo_ids: ["gone-photo"], cover_photo_id: "gone-photo", cover_box: [], hidden: false },
+  ];
+  const result = await listPeopleClusters(
+    fakeBase44([], clusters),
+    { id: "participant-1", claimed_cluster_keys: ["person_a"] },
+    listFetcher(5),
+  );
+
+  assert.deepEqual(result.people.map(({ clusterKey }) => clusterKey), ["person_a", "person_b"], "claimed groups come first");
+  assert.deepEqual(result.people.map(({ claimed }) => claimed), [true, false]);
+  assert.deepEqual(result.people.map(({ photoCount }) => photoCount), [2, 3]);
+});
+
+test("claiming validates the face group and unclaiming works without one", async () => {
+  const { claimFaceCluster } = await import(serviceModuleUrl) as ServiceModule;
+  const clusters = [{ cluster_key: "person_a", photo_ids: ["photo-1"], hidden: false }];
+
+  const updates: unknown[] = [];
+  const claimResult = await claimFaceCluster(
+    fakeBase44(updates, clusters),
+    { id: "participant-1", claimed_cluster_keys: [] },
+    "person_a",
+    true,
+  );
+  assert.deepEqual(claimResult.claimedClusterKeys, ["person_a"]);
+  assert.deepEqual(updates, [{ claimed_cluster_keys: ["person_a"] }]);
+
+  await assert.rejects(
+    claimFaceCluster(fakeBase44([], clusters), { id: "participant-1", claimed_cluster_keys: [] }, "person_unknown", true),
+    /invalid/i,
+  );
+
+  const unclaimUpdates: unknown[] = [];
+  const unclaimResult = await claimFaceCluster(
+    fakeBase44(unclaimUpdates, clusters),
+    { id: "participant-1", claimed_cluster_keys: ["person_a", "person_b"] },
+    "person_b",
+    false,
+  );
+  assert.deepEqual(unclaimResult.claimedClusterKeys, ["person_a"]);
+});
+
+test("export copies the union of selected and face-matched photos", async () => {
+  const { exportParticipantPhotosFolder } = await import(serviceModuleUrl) as ServiceModule;
+  const requests: RecordedRequest[] = [];
+  const clusters = [{ cluster_key: "person_a", photo_ids: ["photo-2"], hidden: false }];
+  const fetcher = driveExportFetcher({
+    picksParent: "parent-1",
+    existingCopies: [],
+    eventFiles: [driveFile(1), driveFile(2), driveFile(3)],
+  }, requests);
+
+  const result = await exportParticipantPhotosFolder(
+    fakeBase44([], clusters),
+    { id: "participant-1", display_name: "Casey", selected_photo_ids: ["photo-1"], claimed_cluster_keys: ["person_a"], photos_folder_id: "folder-9" },
+    fetcher,
+  );
+
+  assert.equal(result.photoCount, 2);
+  const copiedIds = requests.filter(({ url }) => url.endsWith("/copy")).map(({ url }) => url.split("/").at(-2));
+  assert.deepEqual(copiedIds.toSorted(), ["photo-1", "photo-2"]);
 });

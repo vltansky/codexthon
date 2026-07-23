@@ -2,7 +2,7 @@ import { createClientFromRequest } from "npm:@base44/sdk";
 
 import { verifyAccessToken } from "./access-link.ts";
 import { toPhotoFunctionError } from "./errors.ts";
-import { exportParticipantPhotosFolder, listParticipantPhotos, saveParticipantPhotoSelection } from "./service.ts";
+import { claimFaceCluster, exportParticipantPhotosFolder, listParticipantPhotos, listPeopleClusters, saveParticipantPhotoSelection } from "./service.ts";
 
 const securityHeaders = { "Cache-Control": "no-store", "Referrer-Policy": "no-referrer" };
 
@@ -15,6 +15,7 @@ Deno.serve(async (request) => {
       view?: unknown;
       page?: unknown;
       pageSize?: unknown;
+      clusterKey?: unknown;
     };
     const base44 = createClientFromRequest(request);
     const participant = body.token
@@ -24,6 +25,18 @@ Deno.serve(async (request) => {
     if (body.action === "save" || (body.action === undefined && body.selectedPhotoIds !== undefined)) {
       return Response.json(
         await saveParticipantPhotoSelection(base44, participant, body.selectedPhotoIds),
+        { headers: securityHeaders },
+      );
+    }
+    if (body.action === "people") {
+      return Response.json(
+        await listPeopleClusters(base44, participant),
+        { headers: securityHeaders },
+      );
+    }
+    if (body.action === "claim" || body.action === "unclaim") {
+      return Response.json(
+        await claimFaceCluster(base44, participant, body.clusterKey, body.action === "claim"),
         { headers: securityHeaders },
       );
     }

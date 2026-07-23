@@ -2,6 +2,7 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 
 import { AdminContentPage } from "./AdminContentPage";
 import { AdminCodesPage } from "./AdminCodesPage";
+import { AdminFacesPage } from "./AdminFacesPage";
 import { AdminDashboard } from "./AdminDashboard";
 import type { AdminPage } from "./AdminHeader";
 import { AdminJudgingPage } from "./AdminJudgingPage";
@@ -66,14 +67,14 @@ export function App() {
   }
 
   if (accessToken) {
-    if (photosRoute) return <ParticipantPhotosPage accessToken={accessToken} view={photosRoute.view} page={photosRoute.page} />;
+    if (photosRoute) return <ParticipantPhotosPage accessToken={accessToken} view={photosRoute.view} page={photosRoute.page} clusterKey={photosRoute.clusterKey} />;
     return <ParticipantDashboard accessToken={accessToken} onExit={() => {
       sessionStorage.removeItem(accessSessionKey);
       setAccessToken(null);
     }} />;
   }
   if (localPreview) {
-    if (photosRoute) return <ParticipantPhotosPage preview view={photosRoute.view} page={photosRoute.page} />;
+    if (photosRoute) return <ParticipantPhotosPage preview view={photosRoute.view} page={photosRoute.page} clusterKey={photosRoute.clusterKey} />;
     return <ParticipantDashboard preview />;
   }
   if (user === undefined) return <main className="centered-state"><p>Opening the event portal…</p></main>;
@@ -89,9 +90,10 @@ export function App() {
     if (activePage === "teams") return <AdminTeamsPage user={user} onNavigate={navigateAdmin} />;
     if (activePage === "content") return <AdminContentPage user={user} onNavigate={navigateAdmin} />;
     if (activePage === "codes") return <AdminCodesPage user={user} onNavigate={navigateAdmin} />;
+    if (activePage === "faces") return <AdminFacesPage user={user} onNavigate={navigateAdmin} />;
     return <AdminDashboard user={user} onNavigate={navigateAdmin} />;
   }
-  if (photosRoute) return <ParticipantPhotosPage view={photosRoute.view} page={photosRoute.page} />;
+  if (photosRoute) return <ParticipantPhotosPage view={photosRoute.view} page={photosRoute.page} clusterKey={photosRoute.clusterKey} />;
   return <ParticipantDashboard />;
 }
 
@@ -119,6 +121,7 @@ function adminPageFromPath(pathname: string): AdminPage {
   if (pathname === "/admin/teams") return "teams";
   if (pathname === "/admin/codes") return "codes";
   if (pathname === "/admin/content") return "content";
+  if (pathname === "/admin/faces") return "faces";
   return "desk";
 }
 

@@ -16,6 +16,8 @@ export interface IndexablePhoto {
   name: string;
   thumbnailUrl: string;
   createdAt: string;
+  width: number;
+  height: number;
 }
 
 interface DriveFile {
@@ -24,7 +26,11 @@ interface DriveFile {
   mimeType?: string;
   thumbnailLink?: string;
   createdTime?: string;
+  imageMediaMetadata?: { width?: number; height?: number; rotation?: number };
 }
+
+const fallbackPhotoWidth = 1600;
+const fallbackPhotoHeight = 1067;
 
 async function listFolderTreeIds(accessToken: string, fetcher: typeof fetch): Promise<string[]> {
   const rootFolderId = eventPhotoFolderId();
@@ -72,7 +78,7 @@ export async function listIndexablePhotos(accessToken: string, fetcher: typeof f
     for (let requestIndex = 0; requestIndex < maximumListRequests; requestIndex++) {
       const parameters = new URLSearchParams({
         q: `(${parentsClause}) and trashed = false and mimeType contains 'image/'`,
-        fields: "nextPageToken,files(id,name,mimeType,thumbnailLink,createdTime)",
+        fields: "nextPageToken,files(id,name,mimeType,thumbnailLink,createdTime,imageMediaMetadata(width,height,rotation))",
         orderBy: "createdTime desc",
         pageSize: String(drivePageSize),
       });
@@ -85,12 +91,19 @@ export async function listIndexablePhotos(accessToken: string, fetcher: typeof f
       const data = await response.json() as { nextPageToken?: string; files?: DriveFile[] };
       for (const file of data.files ?? []) {
         if (!file.id || !file.name || !file.mimeType?.startsWith("image/") || !file.thumbnailLink) continue;
+        const metadata = file.imageMediaMetadata ?? {};
+        const rawWidth = metadata.width ?? fallbackPhotoWidth;
+        const rawHeight = metadata.height ?? fallbackPhotoHeight;
+        // Drive reports pre-rotation sensor dimensions; odd EXIF rotations render swapped.
+        const rotated = (metadata.rotation ?? 0) % 2 === 1;
         photos.push({
           id: file.id,
           name: file.name,
           // Drive issues =s220 thumbnails by default; 1000px keeps small faces detectable.
           thumbnailUrl: file.thumbnailLink.replace(/=s\d+$/, "=s1000"),
           createdAt: file.createdTime ?? "",
+          width: rotated ? rawHeight : rawWidth,
+          height: rotated ? rawWidth : rawHeight,
         });
       }
       pageToken = data.nextPageToken ?? "";

@@ -48,8 +48,25 @@ export interface ParticipantPhotosPageData {
   pageCount: number;
   totalCount: number;
   selectedPhotoIds: string[];
+  matchedPhotoIds: string[];
+  claimedClusterKeys: string[];
   photosFolderLink: string | null;
   sourceFolderLink: string;
+}
+
+export interface PersonClusterSummary {
+  clusterKey: string;
+  faceCount: number;
+  photoCount: number;
+  coverThumbnailUrl: string;
+  coverBox: number[];
+  coverAspect: number;
+  claimed: boolean;
+}
+
+export interface ParticipantPeopleData {
+  people: PersonClusterSummary[];
+  claimedClusterKeys: string[];
 }
 
 export interface MentorRecord {
