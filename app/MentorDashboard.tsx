@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ArrowRight } from "lucide-react";
 
 import { base44 } from "./base44Client";
@@ -10,12 +10,23 @@ import { photosPagePath } from "../src/photo-gallery";
 export function MentorDashboard({ fallbackError, accessToken, onExit }: { fallbackError?: string; accessToken?: string; onExit?: () => void }) {
   const [data, setData] = useState<MentorPortalData | null>(null);
   const [error, setError] = useState("");
+  const [savingEmail, setSavingEmail] = useState(false);
+  const [emailError, setEmailError] = useState("");
+  const emailDialogRef = useRef<HTMLDialogElement | null>(null);
   const exit = onExit ?? (() => base44.auth.logout(window.location.origin));
+  const needsEmail = Boolean(accessToken && data && !data.mentor.email);
 
   useEffect(() => {
     // Mentor data is permission-filtered by the authenticated Base44 function.
     void loadMentorPortal();
   }, []);
+
+  useEffect(() => {
+    // Native modal dialogs only open imperatively via showModal.
+    const dialog = emailDialogRef.current;
+    if (needsEmail && dialog && !dialog.open) dialog.showModal();
+    if (!needsEmail && dialog?.open) dialog.close();
+  }, [needsEmail]);
 
   async function loadMentorPortal() {
     setError("");
@@ -23,6 +34,20 @@ export function MentorDashboard({ fallbackError, accessToken, onExit }: { fallba
       setData(unwrapBase44FunctionResponse<MentorPortalData>(await base44.functions.invoke("mentor-data", accessToken ? { token: accessToken } : {})));
     } catch (caught) {
       setError(fallbackError ?? (caught instanceof Error ? caught.message : "Could not load your mentor details"));
+    }
+  }
+
+  async function saveEmail(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const email = new FormData(event.currentTarget).get("email");
+    setSavingEmail(true);
+    setEmailError("");
+    try {
+      setData(unwrapBase44FunctionResponse<MentorPortalData>(await base44.functions.invoke("mentor-data", { token: accessToken, action: "set-email", email })));
+    } catch (caught) {
+      setEmailError(caught instanceof Error ? caught.message : "Could not save your email");
+    } finally {
+      setSavingEmail(false);
     }
   }
 
@@ -80,6 +105,17 @@ export function MentorDashboard({ fallbackError, accessToken, onExit }: { fallba
           );
         })}
       </div>
+
+      <dialog className="mentor-onboard-dialog" ref={emailDialogRef} onCancel={(event) => event.preventDefault()} aria-labelledby="mentor-onboard-title">
+        <form onSubmit={(event) => void saveEmail(event)}>
+          <p className="eyebrow">One quick thing</p>
+          <h2 id="mentor-onboard-title">Add your email</h2>
+          <p>It keeps your mentor access if you lose this link or switch devices.</p>
+          <label>Email<input name="email" type="email" required autoFocus placeholder="you@example.com" disabled={savingEmail} /></label>
+          {emailError && <p className="mentor-onboard-error" role="alert">{emailError}</p>}
+          <button className="primary-button" disabled={savingEmail}>{savingEmail ? "Saving…" : "Save email"}</button>
+        </form>
+      </dialog>
     </main>
   );
 }
