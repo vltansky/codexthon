@@ -129,9 +129,30 @@ export function AdminFacesPage({ user, onNavigate }: { user: AppUser; onNavigate
     setRefreshingCovers(true);
     setNotice("Refreshing group covers and sorting (analyzing photo sharpness on the server)…");
     try {
-      const result = await invokeFaceIndex<{ analyzedPhotos: number; failedPhotos: number; clusterCount: number }>({ action: "recompute" });
-      const failed = result.failedPhotos ? `; ${result.failedPhotos} photo${result.failedPhotos === 1 ? "" : "s"} could not be analyzed` : "";
-      await refresh(`Refreshed covers and sorting for ${result.clusterCount} groups (${result.analyzedPhotos} photos analyzed${failed})`);
+      let analyzedTotal = 0;
+      let failedTotal = 0;
+      let previousRemaining = Infinity;
+      // The server analyzes a small batch per request to stay inside the
+      // function timeout; keep calling until it reports done.
+      while (true) {
+        const result = await invokeFaceIndex<{
+          done: boolean;
+          analyzedPhotos: number;
+          failedPhotos: number;
+          remainingPhotos: number;
+          clusterCount?: number;
+        }>({ action: "recompute" });
+        analyzedTotal += result.analyzedPhotos;
+        failedTotal += result.failedPhotos;
+        if (result.done) {
+          const failed = failedTotal ? `; ${failedTotal} photo${failedTotal === 1 ? "" : "s"} could not be analyzed` : "";
+          await refresh(`Refreshed covers and sorting for ${result.clusterCount} groups (${analyzedTotal} photos analyzed${failed})`);
+          break;
+        }
+        if (result.remainingPhotos >= previousRemaining) throw new Error("Cover refresh is not making progress; please try again");
+        previousRemaining = result.remainingPhotos;
+        setNotice(`Refreshing group covers… ${analyzedTotal + failedTotal} photos analyzed, ${result.remainingPhotos} remaining`);
+      }
     } catch (caught) {
       setNotice(caught instanceof Error ? caught.message : "Could not refresh the group covers");
     } finally {

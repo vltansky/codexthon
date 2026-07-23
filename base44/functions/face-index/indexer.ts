@@ -152,13 +152,19 @@ export async function listClusters(base44: any) {
   };
 }
 
+// Thumbnail fetch plus pure-JS jpeg decode runs ~1s per photo, so one request
+// cannot process a whole event without hitting the platform request timeout.
+// Each call handles one small batch; the caller loops until done.
+const recomputeBatchLimit = 10;
+
 // Backfills sharpness for faces indexed before the browser reported it (from
-// Drive thumbnail crops), then re-picks every cover and centroid in place.
+// Drive thumbnail crops), one batch per call. Once nothing is left to
+// backfill, the final call re-picks every cover and centroid in place.
 // Cluster keys never change, so participant claims survive — unlike a reset.
 export async function recomputeClusters(
   base44: any,
   fetcher: typeof fetch = fetch,
-): Promise<{ analyzedPhotos: number; failedPhotos: number; clusterCount: number }> {
+): Promise<{ done: boolean; analyzedPhotos: number; failedPhotos: number; remainingPhotos: number; clusterCount?: number }> {
   // jpeg-js loads lazily: node-based tests import this module without npm: support.
   const { default: jpeg } = await import("npm:jpeg-js@0.4.4");
   const [photos, records] = await Promise.all([
@@ -166,31 +172,46 @@ export async function recomputeClusters(
     listIndexRecords(base44),
   ]);
   const photoById = new Map(photos.map((photo) => [photo.id, photo]));
+  const pending = records.filter((record) => {
+    const faces = record.faces ?? [];
+    return faces.length > 0 && faces.some((face) => typeof face.sharpness !== "number") &&
+      record.id && photoById.has(record.photo_id);
+  });
+
+  if (pending.length === 0) {
+    const touchedClusterKeys = new Set(
+      records.flatMap((record) => (record.faces ?? []).map((face) => face.cluster_key))
+        .filter((key) => key && !key.startsWith(noiseClusterPrefix)),
+    );
+    const clusterCount = await upsertClusters(base44, records, touchedClusterKeys);
+    return { done: true, analyzedPhotos: 0, failedPhotos: 0, remainingPhotos: 0, clusterCount };
+  }
+
   let analyzedPhotos = 0;
   let failedPhotos = 0;
-  for (const record of records) {
+  for (const record of pending.slice(0, recomputeBatchLimit)) {
     const faces = record.faces ?? [];
-    if (faces.length === 0 || faces.every((face) => typeof face.sharpness === "number")) continue;
-    const photo = photoById.get(record.photo_id);
-    if (!photo || !record.id) continue;
     try {
-      const bytes = await fetchThumbnail(photo.thumbnailUrl, fetcher);
+      const bytes = await fetchThumbnail(photoById.get(record.photo_id)!.thumbnailUrl, fetcher);
       if (!bytes) throw new Error("Thumbnail unavailable");
       const image = jpeg.decode(bytes, { useTArray: true, maxMemoryUsageInMB: 128 });
       for (const face of faces) face.sharpness = round(faceSharpness(image, face.box), 100);
-      await base44.asServiceRole.entities.PhotoFaceIndex.update(record.id, { faces });
       analyzedPhotos += 1;
     } catch (error) {
       console.error(`face-index: sharpness backfill failed for ${record.photo_name || record.photo_id}: ${error}`);
+      // Zero marks the record processed so a broken thumbnail cannot make the
+      // caller loop forever; the face just ranks last for covers.
+      for (const face of faces) face.sharpness = typeof face.sharpness === "number" ? face.sharpness : 0;
       failedPhotos += 1;
     }
+    await base44.asServiceRole.entities.PhotoFaceIndex.update(record.id, { faces });
   }
-  const touchedClusterKeys = new Set(
-    records.flatMap((record) => (record.faces ?? []).map((face) => face.cluster_key))
-      .filter((key) => key && !key.startsWith(noiseClusterPrefix)),
-  );
-  const clusterCount = await upsertClusters(base44, records, touchedClusterKeys);
-  return { analyzedPhotos, failedPhotos, clusterCount };
+  return {
+    done: false,
+    analyzedPhotos,
+    failedPhotos,
+    remainingPhotos: pending.length - Math.min(pending.length, recomputeBatchLimit),
+  };
 }
 
 export async function resetIndex(base44: any): Promise<{ deletedRecords: number; deletedClusters: number }> {
@@ -285,6 +306,7 @@ async function upsertClusters(base44: any, records: IndexRecord[], touchedCluste
   if (touchedClusterKeys.size === 0) return existing.length;
   const existingByKey = new Map<string, any>(existing.map((cluster: any) => [cluster.cluster_key, cluster]));
 
+  const operations: (() => Promise<void>)[] = [];
   for (const clusterKey of touchedClusterKeys) {
     if (clusterKey.startsWith(noiseClusterPrefix)) continue;
     const memberFaces = records.flatMap((record) =>
@@ -304,8 +326,13 @@ async function upsertClusters(base44: any, records: IndexRecord[], touchedCluste
       centroid: clusterCentroid(memberFaces.map(({ embedding }) => embedding)),
     };
     const current = existingByKey.get(clusterKey);
-    if (current) await base44.asServiceRole.entities.FaceCluster.update(current.id, fields);
-    else await base44.asServiceRole.entities.FaceCluster.create({ ...fields, hidden: false });
+    if (current) operations.push(() => base44.asServiceRole.entities.FaceCluster.update(current.id, fields));
+    else operations.push(() => base44.asServiceRole.entities.FaceCluster.create({ ...fields, hidden: false }));
+  }
+  // A recompute touches every cluster at once; sequential writes would stack
+  // into the request timeout, so writes run in small parallel batches.
+  for (let batchStart = 0; batchStart < operations.length; batchStart += 8) {
+    await Promise.all(operations.slice(batchStart, batchStart + 8).map((operation) => operation()));
   }
   return existing.length + [...touchedClusterKeys].filter((key) => !existingByKey.has(key)).length;
 }
