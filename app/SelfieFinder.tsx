@@ -31,7 +31,9 @@ export function SelfieFinder({ accessToken, claimedClusterKeys, claimBusyKey, on
       const faces = await detectAndEmbed(file);
       // Largest face only: in a group selfie the person holding the camera
       // fills the most frame, and claiming is personal.
-      const best = faces.toSorted((first, second) => boxArea(second.box) - boxArea(first.box))[0];
+      const best = faces.length === 0
+        ? undefined
+        : faces.reduce((largest, face) => boxArea(face.box) > boxArea(largest.box) ? face : largest);
       if (!best) {
         setError("No face was detected in that photo. Try a closer, well-lit selfie.");
         return;
@@ -70,7 +72,6 @@ export function SelfieFinder({ accessToken, claimedClusterKeys, claimBusyKey, on
         ref={inputRef}
         type="file"
         accept="image/*"
-        capture="user"
         hidden
         onChange={(event) => {
           const file = event.target.files?.[0];
