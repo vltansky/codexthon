@@ -665,3 +665,10 @@
 .admin-shell .face-tile { margin: 0; text-align: center; }
 .admin-shell .face-tile-image { aspect-ratio: 1; border-radius: 12px; background-color: rgba(255, 255, 255, 0.06); background-repeat: no-repeat; }
 .admin-shell .face-tile figcaption { margin-top: 6px; font-size: 0.75rem; opacity: 0.75; }
+
+.admin-shell .merge-pair-list { display: grid; gap: 14px; margin-top: 16px; }
+.admin-shell .merge-pair { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 12px 14px; border: 1px solid var(--admin-line); border-radius: 14px; }
+.admin-shell .merge-pair-faces { display: flex; gap: 10px; }
+.admin-shell .merge-pair .face-tile-image { width: 84px; }
+.admin-shell .merge-pair-similarity { min-width: 84px; font-size: 0.85rem; opacity: 0.8; }
+.admin-shell .merge-pair-actions { display: flex; gap: 8px; margin-left: auto; }

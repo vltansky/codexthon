@@ -1,6 +1,16 @@
 import { createClientFromRequest } from "npm:@base44/sdk";
 
-import { indexStatus, ingestPhoto, listClusters, pendingPhotos, proxyThumbnail, recomputeClusters, resetIndex } from "./indexer.ts";
+import {
+  indexStatus,
+  ingestPhoto,
+  listClusters,
+  listMergeCandidates,
+  mergeClusterPair,
+  pendingPhotos,
+  proxyThumbnail,
+  recomputeClusters,
+  resetIndex,
+} from "./indexer.ts";
 
 const securityHeaders = { "Cache-Control": "no-store", "Referrer-Policy": "no-referrer" };
 
@@ -12,7 +22,14 @@ Deno.serve(async (request) => {
       return Response.json({ error: "Admin access required" }, { status: 403, headers: securityHeaders });
     }
 
-    const body = await request.json() as { action?: unknown; photoId?: unknown; photoName?: unknown; faces?: unknown };
+    const body = await request.json() as {
+      action?: unknown;
+      photoId?: unknown;
+      photoName?: unknown;
+      faces?: unknown;
+      sourceKey?: unknown;
+      targetKey?: unknown;
+    };
     if (body.action === "pending") {
       return Response.json(await pendingPhotos(base44), { headers: securityHeaders });
     }
@@ -27,6 +44,12 @@ Deno.serve(async (request) => {
     }
     if (body.action === "recompute") {
       return Response.json(await recomputeClusters(base44), { headers: securityHeaders });
+    }
+    if (body.action === "merge-candidates") {
+      return Response.json(await listMergeCandidates(base44), { headers: securityHeaders });
+    }
+    if (body.action === "merge") {
+      return Response.json(await mergeClusterPair(base44, body.sourceKey, body.targetKey), { headers: securityHeaders });
     }
     if (body.action === "reset") {
       return Response.json(await resetIndex(base44), { headers: securityHeaders });

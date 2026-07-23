@@ -99,12 +99,24 @@ export async function ingestPhoto(base44: any, body: { photoId?: unknown; photoN
     return { alreadyIndexed: true, faceCount: 0, clusterCount: undefined };
   }
 
+  // Noise faces are unreliable anchors and never join the match pool.
   const knownFaces = records.flatMap((record) =>
-    (record.faces ?? []).map((face) => ({ clusterKey: face.cluster_key, embedding: Float32Array.from(face.embedding) }))
+    (record.faces ?? [])
+      .filter((face) => !face.cluster_key.startsWith(noiseClusterPrefix))
+      .map((face) => ({ clusterKey: face.cluster_key, embedding: Float32Array.from(face.embedding) }))
   );
   const touchedClusterKeys = new Set<string>();
   for (const face of faces) {
-    face.cluster_key = assignCluster(Float32Array.from(face.embedding), knownFaces);
+    const matchedKey = assignCluster(Float32Array.from(face.embedding), knownFaces);
+    // Join-not-seed gating: a tiny face may still match into an existing
+    // person (badges keep working), but an unmatched tiny face becomes
+    // invisible noise instead of a new one-face group. Measured on this
+    // event: 151 of 271 singleton groups were faces under 6% of frame height.
+    if (!matchedKey && faceHeight(face.box) < minimumSeedFaceHeight) {
+      face.cluster_key = `${noiseClusterPrefix}${crypto.randomUUID().slice(0, 13)}`;
+      continue;
+    }
+    face.cluster_key = matchedKey || `person_${crypto.randomUUID().slice(0, 13)}`;
     knownFaces.push({ clusterKey: face.cluster_key, embedding: Float32Array.from(face.embedding) });
     touchedClusterKeys.add(face.cluster_key);
   }
@@ -174,7 +186,8 @@ export async function recomputeClusters(
     }
   }
   const touchedClusterKeys = new Set(
-    records.flatMap((record) => (record.faces ?? []).map((face) => face.cluster_key)).filter(Boolean),
+    records.flatMap((record) => (record.faces ?? []).map((face) => face.cluster_key))
+      .filter((key) => key && !key.startsWith(noiseClusterPrefix)),
   );
   const clusterCount = await upsertClusters(base44, records, touchedClusterKeys);
   return { analyzedPhotos, failedPhotos, clusterCount };
@@ -223,6 +236,13 @@ export function parseFaces(payload: unknown, photoId: string): IndexedFace[] {
   });
 }
 
+const noiseClusterPrefix = "noise_";
+const minimumSeedFaceHeight = 0.06;
+
+function faceHeight(box: number[]): number {
+  return (box[3] ?? 0) - (box[1] ?? 0);
+}
+
 function assignCluster(embedding: Float32Array, knownFaces: { clusterKey: string; embedding: Float32Array }[]): string {
   let bestSimilarity = similarityThreshold;
   let bestClusterKey = "";
@@ -233,7 +253,7 @@ function assignCluster(embedding: Float32Array, knownFaces: { clusterKey: string
     bestSimilarity = similarity;
     bestClusterKey = known.clusterKey;
   }
-  return bestClusterKey || `person_${crypto.randomUUID().slice(0, 13)}`;
+  return bestClusterKey;
 }
 
 // Detection score measures face-ness, not quality — a large motion-blurred
@@ -266,6 +286,7 @@ async function upsertClusters(base44: any, records: IndexRecord[], touchedCluste
   const existingByKey = new Map<string, any>(existing.map((cluster: any) => [cluster.cluster_key, cluster]));
 
   for (const clusterKey of touchedClusterKeys) {
+    if (clusterKey.startsWith(noiseClusterPrefix)) continue;
     const memberFaces = records.flatMap((record) =>
       (record.faces ?? [])
         .filter((face) => face.cluster_key === clusterKey)
@@ -287,6 +308,116 @@ async function upsertClusters(base44: any, records: IndexRecord[], touchedCluste
     else await base44.asServiceRole.entities.FaceCluster.create({ ...fields, hidden: false });
   }
   return existing.length + [...touchedClusterKeys].filter((key) => !existingByKey.has(key)).length;
+}
+
+// Candidate pairs for admin-confirmed merging: clusters whose centroids sit
+// above this cosine similarity are probably the same person split by pose or
+// lighting. Sharing a photo is hard negative evidence (one person cannot
+// appear twice in a frame), so such pairs are never offered.
+const mergeCandidateThreshold = 0.55;
+
+export async function listMergeCandidates(base44: any) {
+  const [photos, records, clusters] = await Promise.all([
+    cachedPhotos(base44),
+    listIndexRecords(base44),
+    base44.asServiceRole.entities.FaceCluster.filter({}, undefined, entityPageSize),
+  ]);
+  const photoById = new Map(photos.map((photo) => [photo.id, photo]));
+  const visible = clusters.filter((cluster: any) => cluster.hidden !== true && Array.isArray(cluster.photo_ids));
+  const centroidByKey = new Map<string, number[]>();
+  for (const cluster of visible) {
+    const stored = Array.isArray(cluster.centroid) && cluster.centroid.length > 0 ? cluster.centroid : null;
+    centroidByKey.set(cluster.cluster_key, stored ?? clusterCentroid(memberEmbeddings(records, cluster.cluster_key)));
+  }
+
+  const side = (cluster: any) => {
+    const cover = photoById.get(cluster.cover_photo_id);
+    return {
+      clusterKey: cluster.cluster_key,
+      faceCount: cluster.face_count ?? 0,
+      photoCount: (cluster.photo_ids ?? []).length,
+      coverBox: cluster.cover_box ?? [],
+      coverThumbnailUrl: cover?.thumbnailUrl ?? "",
+      coverAspect: cover && cover.height > 0 ? cover.width / cover.height : 1.5,
+    };
+  };
+
+  const candidates = [];
+  for (let i = 0; i < visible.length; i++) {
+    for (let j = i + 1; j < visible.length; j++) {
+      const left = visible[i];
+      const right = visible[j];
+      const similarity = dotProduct(centroidByKey.get(left.cluster_key) ?? [], centroidByKey.get(right.cluster_key) ?? []);
+      if (similarity < mergeCandidateThreshold) continue;
+      if (sharesPhoto(left.photo_ids ?? [], right.photo_ids ?? [])) continue;
+      // Merge the smaller cluster into the larger so the more established key survives.
+      const [source, target] = (left.face_count ?? 0) <= (right.face_count ?? 0) ? [left, right] : [right, left];
+      candidates.push({ similarity: round(similarity, 100), source: side(source), target: side(target) });
+    }
+  }
+  return { candidates: candidates.toSorted((first, second) => second.similarity - first.similarity) };
+}
+
+export async function mergeClusterPair(base44: any, sourceKeyRaw: unknown, targetKeyRaw: unknown) {
+  const sourceKey = typeof sourceKeyRaw === "string" ? sourceKeyRaw : "";
+  const targetKey = typeof targetKeyRaw === "string" ? targetKeyRaw : "";
+  if (!sourceKey || !targetKey || sourceKey === targetKey) throw new Error("Merge pair is invalid");
+
+  const clusters = await base44.asServiceRole.entities.FaceCluster.filter({}, undefined, entityPageSize);
+  const source = clusters.find((cluster: any) => cluster.cluster_key === sourceKey);
+  const target = clusters.find((cluster: any) => cluster.cluster_key === targetKey);
+  if (!source || !target) throw new Error("Merge pair is invalid");
+  if (sharesPhoto(source.photo_ids ?? [], target.photo_ids ?? [])) {
+    throw new Error("These groups appear together in a photo and cannot be the same person");
+  }
+
+  const records = await listIndexRecords(base44);
+  let mergedFaces = 0;
+  for (const record of records) {
+    const faces = record.faces ?? [];
+    if (!faces.some((face) => face.cluster_key === sourceKey)) continue;
+    for (const face of faces) {
+      if (face.cluster_key !== sourceKey) continue;
+      face.cluster_key = targetKey;
+      mergedFaces += 1;
+    }
+    if (record.id) await base44.asServiceRole.entities.PhotoFaceIndex.update(record.id, { faces });
+  }
+
+  // Claims are personal pointers at cluster keys; every owner type follows the merge.
+  let migratedClaims = 0;
+  for (const entityName of ["Participant", "Mentor", "Judge"]) {
+    const entity = base44.asServiceRole.entities[entityName];
+    if (!entity) continue;
+    const owners = await entity.filter({}, undefined, 5000);
+    for (const owner of owners) {
+      const keys = Array.isArray(owner.claimed_cluster_keys) ? owner.claimed_cluster_keys : [];
+      if (!keys.includes(sourceKey)) continue;
+      const next = [...new Set(keys.map((key: string) => key === sourceKey ? targetKey : key))];
+      await entity.update(owner.id, { claimed_cluster_keys: next });
+      migratedClaims += 1;
+    }
+  }
+
+  await base44.asServiceRole.entities.FaceCluster.delete(source.id);
+  await upsertClusters(base44, records, new Set([targetKey]));
+  return { mergedFaces, migratedClaims, targetKey };
+}
+
+function memberEmbeddings(records: IndexRecord[], clusterKey: string): number[][] {
+  return records.flatMap((record) => (record.faces ?? []).filter((face) => face.cluster_key === clusterKey).map((face) => face.embedding));
+}
+
+function sharesPhoto(left: string[], right: string[]): boolean {
+  const rightIds = new Set(right);
+  return left.some((photoId) => rightIds.has(photoId));
+}
+
+function dotProduct(left: number[], right: number[]): number {
+  if (left.length === 0 || left.length !== right.length) return 0;
+  let sum = 0;
+  for (let i = 0; i < left.length; i++) sum += left[i]! * right[i]!;
+  return sum;
 }
 
 async function listIndexRecords(base44: any): Promise<IndexRecord[]> {

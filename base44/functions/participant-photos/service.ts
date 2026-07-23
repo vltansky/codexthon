@@ -189,7 +189,13 @@ export async function listPeopleClusters(
         centroid: Array.isArray(cluster.centroid) ? cluster.centroid : [],
       };
     })
-    .filter(({ person }) => person.clusterKey && person.photoCount > 0 && person.coverThumbnailUrl);
+    // Single-face groups are overwhelmingly unusable detections (measured on
+    // this event: median face height 0.053 vs 0.089 for real clusters), so the
+    // participant grid hides them — unless the viewer claimed one.
+    .filter(({ person }) =>
+      person.clusterKey && person.photoCount > 0 && person.coverThumbnailUrl &&
+      (person.faceCount >= 2 || person.claimed)
+    );
   // Centroids stay server-side: only the plain person objects reach the client.
   const people = orderPeopleClusters(orderable).map(({ person }) => person);
   return { people, claimedClusterKeys: claimedKeys };

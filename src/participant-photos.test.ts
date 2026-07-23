@@ -340,6 +340,21 @@ test("people listing marks claimed groups and drops empty or hidden ones", async
   assert.deepEqual(result.people.map(({ photoCount }) => photoCount), [2, 3]);
 });
 
+test("people listing hides single-face groups unless the viewer claimed them", async () => {
+  const { listPeopleClusters } = await import(serviceModuleUrl) as ServiceModule;
+  const clusters = [
+    { cluster_key: "person_real", face_count: 4, photo_ids: ["photo-1", "photo-2"], cover_photo_id: "photo-1", cover_box: [0.1, 0.1, 0.2, 0.3], hidden: false },
+    { cluster_key: "person_noise", face_count: 1, photo_ids: ["photo-3"], cover_photo_id: "photo-3", cover_box: [0, 0, 1, 1], hidden: false },
+    { cluster_key: "person_claimed_single", face_count: 1, photo_ids: ["photo-4"], cover_photo_id: "photo-4", cover_box: [0, 0, 1, 1], hidden: false },
+  ];
+  const result = await listPeopleClusters(
+    fakeBase44([], clusters),
+    { id: "participant-1", claimed_cluster_keys: ["person_claimed_single"] },
+    listFetcher(5),
+  );
+  assert.deepEqual(result.people.map(({ clusterKey }) => clusterKey).toSorted(), ["person_claimed_single", "person_real"]);
+});
+
 test("claiming validates the face group and unclaiming works without one", async () => {
   const { claimFaceCluster } = await import(serviceModuleUrl) as ServiceModule;
   const clusters = [{ cluster_key: "person_a", photo_ids: ["photo-1"], hidden: false }];

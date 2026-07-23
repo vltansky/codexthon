@@ -29,6 +29,21 @@ interface ClusterSummary {
   coverAspect: number;
 }
 
+interface MergeSide {
+  clusterKey: string;
+  faceCount: number;
+  photoCount: number;
+  coverBox: number[];
+  coverThumbnailUrl: string;
+  coverAspect: number;
+}
+
+interface MergeCandidate {
+  similarity: number;
+  source: MergeSide;
+  target: MergeSide;
+}
+
 async function invokeFaceIndex<T>(payload: Record<string, unknown>): Promise<T> {
   return unwrapBase44FunctionResponse<T>(await base44.functions.invoke("face-index", payload));
 }
@@ -38,6 +53,9 @@ export function AdminFacesPage({ user, onNavigate }: { user: AppUser; onNavigate
   const [clusters, setClusters] = useState<ClusterSummary[]>([]);
   const [indexing, setIndexing] = useState(false);
   const [refreshingCovers, setRefreshingCovers] = useState(false);
+  const [mergeCandidates, setMergeCandidates] = useState<MergeCandidate[] | null>(null);
+  const [findingMerges, setFindingMerges] = useState(false);
+  const [mergingKey, setMergingKey] = useState("");
   const [notice, setNotice] = useState("Loading face index status…");
   const stopRef = useRef(false);
 
@@ -121,6 +139,46 @@ export function AdminFacesPage({ user, onNavigate }: { user: AppUser; onNavigate
     }
   }
 
+  async function findMergeCandidates() {
+    setFindingMerges(true);
+    setNotice("Comparing all face groups for probable duplicates…");
+    try {
+      const result = await invokeFaceIndex<{ candidates: MergeCandidate[] }>({ action: "merge-candidates" });
+      setMergeCandidates(result.candidates);
+      setNotice(result.candidates.length
+        ? `${result.candidates.length} probable duplicate pair${result.candidates.length === 1 ? "" : "s"} found — confirm each merge below`
+        : "No probable duplicates found");
+    } catch (caught) {
+      setNotice(caught instanceof Error ? caught.message : "Could not compare face groups");
+    } finally {
+      setFindingMerges(false);
+    }
+  }
+
+  async function mergePair(candidate: MergeCandidate) {
+    setMergingKey(candidate.source.clusterKey);
+    try {
+      const result = await invokeFaceIndex<{ mergedFaces: number; migratedClaims: number }>({
+        action: "merge",
+        sourceKey: candidate.source.clusterKey,
+        targetKey: candidate.target.clusterKey,
+      });
+      setMergeCandidates((current) => (current ?? []).filter((pair) =>
+        pair.source.clusterKey !== candidate.source.clusterKey &&
+        pair.target.clusterKey !== candidate.source.clusterKey
+      ));
+      await refresh(`Merged ${result.mergedFaces} face${result.mergedFaces === 1 ? "" : "s"}${result.migratedClaims ? ` and moved ${result.migratedClaims} claim${result.migratedClaims === 1 ? "" : "s"}` : ""}`);
+    } catch (caught) {
+      setNotice(caught instanceof Error ? caught.message : "Merge failed");
+    } finally {
+      setMergingKey("");
+    }
+  }
+
+  function dismissPair(candidate: MergeCandidate) {
+    setMergeCandidates((current) => (current ?? []).filter((pair) => pair !== candidate));
+  }
+
   async function resetIndex() {
     if (!window.confirm("Delete the whole face index? Photos will need to be indexed again.")) return;
     setNotice("Resetting face index…");
@@ -157,6 +215,9 @@ export function AdminFacesPage({ user, onNavigate }: { user: AppUser; onNavigate
           <button type="button" disabled={indexing || refreshingCovers || !status || status.indexedPhotos === 0} onClick={() => void refreshCovers()}>
             {refreshingCovers ? "Refreshing covers…" : "Refresh group covers & sorting"}
           </button>
+          <button type="button" disabled={indexing || refreshingCovers || findingMerges || !status || status.indexedPhotos === 0} onClick={() => void findMergeCandidates()}>
+            {findingMerges ? "Comparing groups…" : "Find duplicate groups"}
+          </button>
           <button type="button" disabled={indexing || refreshingCovers || !status || status.indexedPhotos === 0} onClick={() => void resetIndex()}>
             Reset index
           </button>
@@ -165,6 +226,38 @@ export function AdminFacesPage({ user, onNavigate }: { user: AppUser; onNavigate
           Photos are analyzed in this browser tab and grouped on the server. Keep the tab open while indexing runs; it is safe to stop and continue later.
         </p>
       </section>
+
+      {mergeCandidates && mergeCandidates.length > 0 ? (
+        <section className="face-cluster-section">
+          <div className="section-heading">
+            <div><p className="section-kicker">Review</p><h2>Probable duplicates</h2></div>
+          </div>
+          <p className="face-index-hint">Same person split by pose or lighting. Merging moves all photos and claims onto the larger group; this cannot be undone.</p>
+          <div className="merge-pair-list">
+            {mergeCandidates.map((candidate) => (
+              <div className="merge-pair" key={`${candidate.source.clusterKey}:${candidate.target.clusterKey}`}>
+                <div className="merge-pair-faces">
+                  <figure className="face-tile">
+                    <div className="face-tile-image" style={faceCoverStyle(candidate.source.coverThumbnailUrl, candidate.source.coverBox, candidate.source.coverAspect)} role="img" aria-label={`Group with ${candidate.source.faceCount} faces`} />
+                    <figcaption>{candidate.source.photoCount} photos</figcaption>
+                  </figure>
+                  <figure className="face-tile">
+                    <div className="face-tile-image" style={faceCoverStyle(candidate.target.coverThumbnailUrl, candidate.target.coverBox, candidate.target.coverAspect)} role="img" aria-label={`Group with ${candidate.target.faceCount} faces`} />
+                    <figcaption>{candidate.target.photoCount} photos</figcaption>
+                  </figure>
+                </div>
+                <span className="merge-pair-similarity">{Math.round(candidate.similarity * 100)}% match</span>
+                <div className="merge-pair-actions">
+                  <button className="primary" type="button" disabled={Boolean(mergingKey)} onClick={() => void mergePair(candidate)}>
+                    {mergingKey === candidate.source.clusterKey ? "Merging…" : "Same person"}
+                  </button>
+                  <button type="button" disabled={Boolean(mergingKey)} onClick={() => dismissPair(candidate)}>Different people</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       <section className="face-cluster-section">
         <div className="section-heading">
