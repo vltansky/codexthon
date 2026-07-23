@@ -13,6 +13,7 @@ import {
   trashDriveFile,
   type DrivePhoto,
 } from "./drive.ts";
+import { orderPeopleClusters } from "./people-order.ts";
 
 const defaultPageSize = 24;
 const maximumPageSize = 60;
@@ -168,11 +169,11 @@ export async function listPeopleClusters(
   const photoById = new Map(photos.map((photo) => [photo.id, photo]));
   const claimedKeys = claimedClusterKeys(participant);
   const claimed = new Set(claimedKeys);
-  const people = clusters
+  const orderable = clusters
     .filter((cluster: any) => cluster.hidden !== true)
     .map((cluster: any) => {
       const cover = photoById.get(cluster.cover_photo_id);
-      return {
+      const person: PersonCluster = {
         clusterKey: String(cluster.cluster_key ?? ""),
         faceCount: cluster.face_count ?? 0,
         photoCount: (cluster.photo_ids ?? []).filter((photoId: string) => availableIds.has(photoId)).length,
@@ -181,10 +182,16 @@ export async function listPeopleClusters(
         coverAspect: cover && cover.height > 0 ? cover.width / cover.height : 1.5,
         claimed: claimed.has(cluster.cluster_key),
       };
+      return {
+        ...person,
+        person,
+        coverSharpness: typeof cluster.cover_sharpness === "number" ? cluster.cover_sharpness : 0,
+        centroid: Array.isArray(cluster.centroid) ? cluster.centroid : [],
+      };
     })
-    .filter((person: PersonCluster) => person.clusterKey && person.photoCount > 0 && person.coverThumbnailUrl)
-    .toSorted((first: PersonCluster, second: PersonCluster) =>
-      Number(second.claimed) - Number(first.claimed) || second.photoCount - first.photoCount);
+    .filter(({ person }) => person.clusterKey && person.photoCount > 0 && person.coverThumbnailUrl);
+  // Centroids stay server-side: only the plain person objects reach the client.
+  const people = orderPeopleClusters(orderable).map(({ person }) => person);
   return { people, claimedClusterKeys: claimedKeys };
 }
 

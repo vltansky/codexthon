@@ -171,10 +171,11 @@ export function ParticipantPhotosPage({ view, page, clusterKey = "", accessToken
       const claimedKeys = new Set(response.claimedClusterKeys);
       setPeopleData((current) => current
         ? {
-          // Claimed faces surface first, matching the server ordering.
+          // Claimed faces surface first; the stable sort keeps the server's
+          // sharpness/nearness ordering within each partition.
           people: current.people
             .map((person) => ({ ...person, claimed: claimedKeys.has(person.clusterKey) }))
-            .sort((first, second) => Number(second.claimed) - Number(first.claimed) || second.photoCount - first.photoCount),
+            .sort((first, second) => Number(second.claimed) - Number(first.claimed)),
           claimedClusterKeys: response.claimedClusterKeys,
         }
         : current);

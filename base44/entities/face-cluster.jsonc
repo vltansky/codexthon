@@ -9,6 +9,8 @@
     "cover_photo_id": { "type": "string" },
     "cover_box": { "type": "array", "items": { "type": "number" } },
     "cover_score": { "type": "number" },
+    "cover_sharpness": { "type": "number" },
+    "centroid": { "type": "array", "items": { "type": "number" } },
     "hidden": { "type": "boolean" }
   },
   "required": ["cluster_key"],

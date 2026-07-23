@@ -206,6 +206,19 @@ export function pickCoverFace<T extends { score: number; sharpness?: number }>(f
   return candidates.toSorted((first, second) => quality(second) - quality(first))[0]!;
 }
 
+// L2-normalized mean embedding; lets listings compare whole clusters for
+// probable same-person pairs that stayed below the merge threshold.
+export function clusterCentroid(embeddings: number[][]): number[] {
+  if (embeddings.length === 0) return [];
+  const centroid = new Array<number>(embeddings[0]!.length).fill(0);
+  for (const embedding of embeddings) {
+    for (let i = 0; i < centroid.length; i++) centroid[i] += embedding[i]!;
+  }
+  const norm = Math.sqrt(centroid.reduce((sum, value) => sum + value * value, 0));
+  if (norm === 0) return centroid.map(() => 0);
+  return centroid.map((value) => round(value / norm, 1e4));
+}
+
 async function upsertClusters(base44: any, records: IndexRecord[], touchedClusterKeys: Set<string>): Promise<number> {
   const existing = await base44.asServiceRole.entities.FaceCluster.filter({}, undefined, entityPageSize);
   if (touchedClusterKeys.size === 0) return existing.length;
@@ -225,6 +238,8 @@ async function upsertClusters(base44: any, records: IndexRecord[], touchedCluste
       cover_photo_id: cover.photoId,
       cover_box: cover.box,
       cover_score: cover.score,
+      cover_sharpness: cover.sharpness ?? 0,
+      centroid: clusterCentroid(memberFaces.map(({ embedding }) => embedding)),
     };
     const current = existingByKey.get(clusterKey);
     if (current) await base44.asServiceRole.entities.FaceCluster.update(current.id, fields);
