@@ -12,6 +12,8 @@ interface FaceIndexStatus {
   remainingPhotos: number;
   faceCount: number;
   clusterCount: number;
+  peopleCount: number;
+  singleFaceClusterCount: number;
 }
 
 interface PendingPhoto {
@@ -220,7 +222,8 @@ export function AdminFacesPage({ user, onNavigate }: { user: AppUser; onNavigate
         <div><span>Indexed</span><strong>{status?.indexedPhotos ?? "–"}</strong></div>
         <div><span>Waiting</span><strong>{status?.remainingPhotos ?? "–"}</strong></div>
         <div><span>Faces</span><strong>{status?.faceCount ?? "–"}</strong></div>
-        <div><span>People</span><strong>{status?.clusterCount ?? "–"}</strong></div>
+        <div><span>People</span><strong>{status?.peopleCount ?? "–"}</strong></div>
+        <div><span>Hidden singles</span><strong>{status?.singleFaceClusterCount ?? "–"}</strong></div>
       </section>
 
       <section className="face-index-controls">

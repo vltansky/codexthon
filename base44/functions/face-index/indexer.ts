@@ -57,6 +57,9 @@ export async function indexStatus(base44: any) {
     remainingPhotos: photos.length - indexedPhotos,
     faceCount: records.reduce((count, record) => count + (record.faces?.length ?? 0), 0),
     clusterCount: clusters.length,
+    // What participants actually see: groups with 2+ faces (singles are hidden).
+    peopleCount: clusters.filter((cluster: any) => (cluster.face_count ?? 0) >= 2).length,
+    singleFaceClusterCount: clusters.filter((cluster: any) => (cluster.face_count ?? 0) < 2).length,
   };
 }
 
