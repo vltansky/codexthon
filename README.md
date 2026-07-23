@@ -14,6 +14,12 @@ Participants see their check-in state, team progress, event details, and credits
 
 ![Participant portal with synthetic event data](docs/screenshots/participant-portal.webp)
 
+### Promo claims
+
+After check-in, the portal unlocks personal Codex and API credit links plus the optional partner coupon.
+
+![Unlocked promo claim area with synthetic credit links](docs/screenshots/promo-claim.webp)
+
 ### Admin dashboard
 
 Operators can track arrivals and portal activity, import event data, manage credits, and deliver personal links.
