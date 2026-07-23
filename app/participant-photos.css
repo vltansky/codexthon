@@ -90,6 +90,10 @@
 .photos-pagination a.disabled { color: #4c5158; pointer-events: none; }
 .photos-pagination span { color: #8d9299; font-size: 12px; }
 
+.photos-load-more { display: inline-flex; align-items: center; gap: 6px; border: 1px solid #3a3a3a; border-radius: 999px; background: none; padding: 10px 22px; color: #f4f1e8; font-size: 13px; font-weight: 600; cursor: pointer; }
+.photos-load-more:hover { border-color: #78a7ff; color: #78a7ff; }
+.photos-load-more:disabled { color: #4c5158; border-color: #303030; cursor: default; }
+
 .photos-folder { display: inline-flex; align-items: center; gap: 7px; margin-top: 32px; color: #b5bac0; font-size: 13px; text-underline-offset: 5px; }
 .photos-folder:hover { color: #fff; }
 

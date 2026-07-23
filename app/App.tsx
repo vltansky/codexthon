@@ -61,12 +61,12 @@ export function App() {
         page: "photos",
         accessMode: participantAccessMode,
         view: photosRoute.view,
-        pageNumber: photosRoute.page,
+        pageNumber: photosRoute.pages,
       });
       return;
     }
     if (pathname === "/") participantAnalytics.pageViewed({ page: "portal", accessMode: participantAccessMode });
-  }, [localPreview, participantAccessMode, pathname, photosRoute?.page, photosRoute?.view]);
+  }, [localPreview, participantAccessMode, pathname, photosRoute?.pages, photosRoute?.view]);
 
   async function resolveUser() {
     try {
@@ -77,14 +77,14 @@ export function App() {
   }
 
   if (accessToken) {
-    if (photosRoute) return <ParticipantPhotosPage accessToken={accessToken} view={photosRoute.view} page={photosRoute.page} clusterKey={photosRoute.clusterKey} />;
+    if (photosRoute) return <ParticipantPhotosPage accessToken={accessToken} view={photosRoute.view} pages={photosRoute.pages} clusterKey={photosRoute.clusterKey} />;
     return <ParticipantDashboard accessToken={accessToken} onExit={() => {
       sessionStorage.removeItem(accessSessionKey);
       setAccessToken(null);
     }} />;
   }
   if (mentorToken) {
-    if (photosRoute) return <ParticipantPhotosPage accessToken={mentorToken} view={photosRoute.view} page={photosRoute.page} clusterKey={photosRoute.clusterKey} />;
+    if (photosRoute) return <ParticipantPhotosPage accessToken={mentorToken} view={photosRoute.view} pages={photosRoute.pages} clusterKey={photosRoute.clusterKey} />;
     return <MentorDashboard accessToken={mentorToken} onExit={() => {
       localStorage.removeItem(mentorSessionKey);
       sessionStorage.removeItem(mentorSessionKey);
@@ -92,7 +92,7 @@ export function App() {
     }} />;
   }
   if (judgeToken) {
-    if (photosRoute) return <ParticipantPhotosPage accessToken={judgeToken} view={photosRoute.view} page={photosRoute.page} clusterKey={photosRoute.clusterKey} />;
+    if (photosRoute) return <ParticipantPhotosPage accessToken={judgeToken} view={photosRoute.view} pages={photosRoute.pages} clusterKey={photosRoute.clusterKey} />;
     return <JudgeDashboard accessToken={judgeToken} onExit={() => {
       localStorage.removeItem(judgeSessionKey);
       sessionStorage.removeItem(judgeSessionKey);
@@ -100,7 +100,7 @@ export function App() {
     }} />;
   }
   if (localPreview) {
-    if (photosRoute) return <ParticipantPhotosPage preview view={photosRoute.view} page={photosRoute.page} clusterKey={photosRoute.clusterKey} />;
+    if (photosRoute) return <ParticipantPhotosPage preview view={photosRoute.view} pages={photosRoute.pages} clusterKey={photosRoute.clusterKey} />;
     return <ParticipantDashboard preview />;
   }
   if (user === undefined) return <main className="centered-state"><p>Opening the event portal…</p></main>;
@@ -119,7 +119,7 @@ export function App() {
     if (activePage === "faces") return <AdminFacesPage user={user} onNavigate={navigateAdmin} />;
     return <AdminDashboard user={user} onNavigate={navigateAdmin} />;
   }
-  if (photosRoute) return <ParticipantPhotosPage view={photosRoute.view} page={photosRoute.page} clusterKey={photosRoute.clusterKey} />;
+  if (photosRoute) return <ParticipantPhotosPage view={photosRoute.view} pages={photosRoute.pages} clusterKey={photosRoute.clusterKey} />;
   return <ParticipantDashboard />;
 }
 

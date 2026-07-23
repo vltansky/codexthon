@@ -1,26 +1,29 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, Check, ChevronLeft, ChevronRight, ExternalLink, FolderDown, Images, UserRound } from "lucide-react";
+import { ArrowLeft, Check, ExternalLink, FolderDown, Images, UserRound } from "lucide-react";
 
 import { base44 } from "./base44Client";
-import { internalLinkHandler, navigateTo } from "./navigation";
+import { internalLinkHandler, replacePath } from "./navigation";
 import { participantAnalytics } from "./participantAnalytics";
 import type { ParticipantPeopleData, ParticipantPhoto, ParticipantPhotosPageData } from "./types";
 import { unwrapBase44FunctionResponse } from "../src/base44-response";
-import { photosPagePath, toggleSelectedPhotoId, type PhotosView } from "../src/photo-gallery";
+import { appendPhotos, clampRestoreDepth, photosPagePath, photosPageSize, toggleSelectedPhotoId, type PhotosView } from "../src/photo-gallery";
 import { photoSelectionTarget } from "../src/participant-analytics";
 import { ParticipantPeopleGrid } from "./ParticipantPeopleGrid";
 import "./participant-photos.css";
 
 interface ParticipantPhotosPageProps {
   view: PhotosView;
-  page: number;
+  pages: number;
   clusterKey?: string | undefined;
   accessToken?: string;
   preview?: boolean;
 }
 
-export function ParticipantPhotosPage({ view, page, clusterKey = "", accessToken, preview = false }: ParticipantPhotosPageProps) {
+export function ParticipantPhotosPage({ view, pages, clusterKey = "", accessToken, preview = false }: ParticipantPhotosPageProps) {
   const [data, setData] = useState<ParticipantPhotosPageData | null>(null);
+  const [photos, setPhotos] = useState<ParticipantPhoto[]>([]);
+  const [reachedEnd, setReachedEnd] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [peopleData, setPeopleData] = useState<ParticipantPeopleData | null>(null);
   const [selectedPhotoIds, setSelectedPhotoIds] = useState<string[]>([]);
   const [loadingPage, setLoadingPage] = useState(false);
@@ -34,12 +37,21 @@ export function ParticipantPhotosPage({ view, page, clusterKey = "", accessToken
   const [folderLink, setFolderLink] = useState("");
   const saveQueueRef = useRef<{ inflight: boolean; pending: string[] | null; lastSaved: string[] }>({ inflight: false, pending: null, lastSaved: [] });
   const loadVersionRef = useRef(0);
+  const loadedPagesRef = useRef(0);
+  const loadingMoreRef = useRef(false);
+  const restoredScrollRef = useRef(false);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    // Photo pages are fetched from the backend per route change; the query
-    // params are the source of truth so refresh and deep links keep working.
+    // Listings reset per route; the ?pages= depth in the URL is the source of
+    // truth so refresh and deep links rebuild everything loaded before. The
+    // `pages` prop is read once per route change on purpose: after that the
+    // component owns the depth and mirrors it into the URL silently.
     if (preview) {
-      setData(previewPageData(view, page));
+      const previewData = previewPageData(view, pages);
+      setData(previewData);
+      setPhotos(previewData.photos);
+      setReachedEnd(true);
       setPeopleData(previewPeopleData);
       setSelectedPhotoIds(previewSelectedIds);
       return;
@@ -48,10 +60,10 @@ export function ParticipantPhotosPage({ view, page, clusterKey = "", accessToken
       void loadPeople();
       return;
     }
-    void loadPhotos();
-  }, [view, page, clusterKey, preview]);
+    void loadPhotos(clampRestoreDepth(pages));
+  }, [view, clusterKey, preview]);
 
-  async function loadPhotos() {
+  async function loadPhotos(depth: number) {
     const loadVersion = ++loadVersionRef.current;
     setError("");
     setLoadingPage(true);
@@ -61,23 +73,61 @@ export function ParticipantPhotosPage({ view, page, clusterKey = "", accessToken
           ...(accessToken ? { token: accessToken } : {}),
           action: "list",
           view,
-          page,
+          page: 1,
+          pageSize: depth * photosPageSize,
           ...(view === "person" ? { clusterKey } : {}),
         }),
       );
       if (loadVersion !== loadVersionRef.current) return;
       setData(response);
+      setPhotos(response.photos);
+      setReachedEnd(response.page >= response.pageCount);
+      loadedPagesRef.current = Math.max(1, Math.min(depth, Math.ceil(response.totalCount / photosPageSize)));
+      replacePath(photosPagePath(view, loadedPagesRef.current, clusterKey));
       setFolderLink(response.photosFolderLink ?? "");
       const queue = saveQueueRef.current;
       queue.lastSaved = response.selectedPhotoIds;
       // A save in flight means the local selection is newer than this listing.
       if (!queue.inflight && !queue.pending) setSelectedPhotoIds(response.selectedPhotoIds);
-      if (response.page !== page) navigateTo(photosPagePath(view, response.page, clusterKey));
     } catch {
       if (loadVersion !== loadVersionRef.current) return;
       setError("Refresh the gallery or open the Drive folder directly.");
     } finally {
       if (loadVersion === loadVersionRef.current) setLoadingPage(false);
+    }
+  }
+
+  async function loadMore() {
+    if (loadingMoreRef.current || loadingPage || reachedEnd) return;
+    loadingMoreRef.current = true;
+    setLoadingMore(true);
+    const loadVersion = loadVersionRef.current;
+    try {
+      const response = unwrapBase44FunctionResponse<ParticipantPhotosPageData>(
+        await base44.functions.invoke("participant-photos", {
+          ...(accessToken ? { token: accessToken } : {}),
+          action: "list",
+          view,
+          page: loadedPagesRef.current + 1,
+          ...(view === "person" ? { clusterKey } : {}),
+        }),
+      );
+      if (loadVersion !== loadVersionRef.current) return;
+      setData(response);
+      setPhotos((current) => appendPhotos(current, response.photos));
+      // The server clamps past-the-end pages, so trusting response.page keeps
+      // the depth honest when photos were removed between fetches.
+      setReachedEnd(response.page >= response.pageCount);
+      loadedPagesRef.current = response.page;
+      replacePath(photosPagePath(view, response.page, clusterKey));
+      const queue = saveQueueRef.current;
+      queue.lastSaved = response.selectedPhotoIds;
+      if (!queue.inflight && !queue.pending) setSelectedPhotoIds(response.selectedPhotoIds);
+    } catch {
+      if (loadVersion === loadVersionRef.current) setError("Refresh the gallery or open the Drive folder directly.");
+    } finally {
+      loadingMoreRef.current = false;
+      setLoadingMore(false);
     }
   }
 
@@ -101,6 +151,51 @@ export function ParticipantPhotosPage({ view, page, clusterKey = "", accessToken
       if (loadVersion === loadVersionRef.current) setLoadingPage(false);
     }
   }
+
+  useEffect(() => {
+    // The sentinel is a DOM node, so observing it needs an effect. It fires
+    // ahead of the viewport edge; the visible button covers keyboard users.
+    const sentinel = sentinelRef.current;
+    if (!sentinel) return;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) void loadMore();
+    }, { rootMargin: "600px 0px" });
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [reachedEnd, loadingPage, view, clusterKey, preview]);
+
+  useEffect(() => {
+    // Scroll depth is saved per route so a refresh can land back on the same
+    // spot once the same depth of photos has been refetched.
+    if (preview || view === "people") return;
+    const storageKey = scrollStorageKey(view, clusterKey);
+    const controller = new AbortController();
+    let frame = 0;
+    window.addEventListener("scroll", () => {
+      if (frame) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        sessionStorage.setItem(storageKey, String(Math.round(window.scrollY)));
+      });
+    }, { signal: controller.signal, passive: true });
+    return () => {
+      controller.abort();
+      if (frame) cancelAnimationFrame(frame);
+    };
+  }, [view, clusterKey, preview]);
+
+  useEffect(() => {
+    // Restores scroll once per full page load, after the refetched grid has
+    // committed. Tile heights come from aspect-ratio metadata, so scrollY is
+    // stable before images finish loading. In-app navigation never restores —
+    // the ref stays set, matching the browser's default SPA behavior.
+    if (preview || view === "people" || restoredScrollRef.current) return;
+    if (loadingPage || photos.length === 0) return;
+    restoredScrollRef.current = true;
+    const stored = Number(sessionStorage.getItem(scrollStorageKey(view, clusterKey)) ?? "");
+    if (!Number.isFinite(stored) || stored <= 0) return;
+    requestAnimationFrame(() => window.scrollTo(0, stored));
+  }, [preview, view, clusterKey, loadingPage, photos]);
 
   function togglePhoto(photoId: string) {
     const nextSelection = toggleSelectedPhotoId(selectedPhotoIds, photoId);
@@ -186,8 +281,9 @@ export function ParticipantPhotosPage({ view, page, clusterKey = "", accessToken
         view,
         selectedCount: response.claimedClusterKeys.length,
       });
-      // Matched photo ids changed server-side; refresh the current listing.
-      if (view !== "people") void loadPhotos();
+      // Matched photo ids changed server-side; refresh the current listing at
+      // the depth already on screen so the scroll position stays meaningful.
+      if (view !== "people") void loadPhotos(clampRestoreDepth(Math.max(1, loadedPagesRef.current)));
     } catch (caught) {
       console.error("participant-photos: updating the face claim failed", caught);
       participantAnalytics.actionFailed({ area: "photos", action: "face_claim", errorCategory: "service_unavailable", view });
@@ -235,8 +331,8 @@ export function ParticipantPhotosPage({ view, page, clusterKey = "", accessToken
   const selectedIds = new Set(selectedPhotoIds);
   const matchedIds = new Set(data?.matchedPhotoIds ?? []);
   const visiblePhotos = view === "mine"
-    ? (data?.photos ?? []).filter((photo) => selectedIds.has(photo.id) || matchedIds.has(photo.id))
-    : data?.photos ?? [];
+    ? photos.filter((photo) => selectedIds.has(photo.id) || matchedIds.has(photo.id))
+    : photos;
   const myPhotoCount = new Set([...selectedPhotoIds, ...(data?.matchedPhotoIds ?? [])]).size;
   const personClaimed = view === "person" && Boolean(clusterKey) && (data?.claimedClusterKeys ?? []).includes(clusterKey);
   const showPhotoGrid = view !== "people";
@@ -309,7 +405,7 @@ export function ParticipantPhotosPage({ view, page, clusterKey = "", accessToken
         <div className="photos-state">
           <Images size={28} aria-hidden="true" />
           <div><strong>Photos are temporarily unavailable.</strong><p>{error}</p></div>
-          <button type="button" onClick={() => view === "people" ? void loadPeople() : void loadPhotos()}>Try again</button>
+          <button type="button" onClick={() => view === "people" ? void loadPeople() : void loadPhotos(clampRestoreDepth(Math.max(1, loadedPagesRef.current)))}>Try again</button>
         </div>
       ) : null}
 
@@ -356,13 +452,13 @@ export function ParticipantPhotosPage({ view, page, clusterKey = "", accessToken
         </div>
       ) : null}
 
-      {showPhotoGrid && visiblePhotos.length > 0 && data ? (
-        <div className="photos-grid" aria-busy={loadingPage}>
+      {showPhotoGrid && visiblePhotos.length > 0 ? (
+        <div className="photos-grid" aria-busy={loadingPage || loadingMore}>
           {visiblePhotos.map((photo, index) => (
             <PhotoTile
               key={photo.id}
               photo={photo}
-              number={(data.page - 1) * data.pageSize + index + 1}
+              number={index + 1}
               selected={selectedIds.has(photo.id)}
               matched={matchedIds.has(photo.id)}
               onToggle={() => togglePhoto(photo.id)}
@@ -371,25 +467,20 @@ export function ParticipantPhotosPage({ view, page, clusterKey = "", accessToken
         </div>
       ) : null}
 
-      {showPhotoGrid && data && data.pageCount > 1 ? (
-        <nav className="photos-pagination" aria-label="Photo pages">
-          <a
-            className={data.page <= 1 ? "disabled" : ""}
-            href={photosPagePath(view, Math.max(1, data.page - 1), clusterKey)}
-            onClick={internalLinkHandler(photosPagePath(view, Math.max(1, data.page - 1), clusterKey))}
-            aria-disabled={data.page <= 1}
-          >
-            <ChevronLeft size={15} aria-hidden="true" /> Previous
-          </a>
-          <span>Page {data.page} of {data.pageCount} · {data.totalCount} photos</span>
-          <a
-            className={data.page >= data.pageCount ? "disabled" : ""}
-            href={photosPagePath(view, Math.min(data.pageCount, data.page + 1), clusterKey)}
-            onClick={internalLinkHandler(photosPagePath(view, Math.min(data.pageCount, data.page + 1), clusterKey))}
-            aria-disabled={data.page >= data.pageCount}
-          >
-            Next <ChevronRight size={15} aria-hidden="true" />
-          </a>
+      {showPhotoGrid && data && visiblePhotos.length > 0 ? (
+        <nav className="photos-pagination" aria-label="More photos">
+          <span>
+            {reachedEnd
+              ? `All ${data.totalCount} photos loaded`
+              : `${photos.length} of ${data.totalCount} photos loaded`}
+          </span>
+          {!reachedEnd ? (
+            <div ref={sentinelRef}>
+              <button className="photos-load-more" type="button" onClick={() => void loadMore()} disabled={loadingMore}>
+                {loadingMore ? "Loading more photos…" : "Load more photos"}
+              </button>
+            </div>
+          ) : null}
         </nav>
       ) : null}
 
@@ -400,6 +491,10 @@ export function ParticipantPhotosPage({ view, page, clusterKey = "", accessToken
       ) : null}
     </main>
   );
+}
+
+function scrollStorageKey(view: PhotosView, clusterKey: string): string {
+  return `photos-scroll:${photosPagePath(view, 1, clusterKey)}`;
 }
 
 function headingForView(view: PhotosView): string {
@@ -452,7 +547,7 @@ function PhotoTile({ photo, number, selected, matched, onToggle }: {
 const previewSelectedIds = ["preview-earth"];
 const previewMatchedIds = ["preview-horizon"];
 
-function previewPageData(view: PhotosView, page: number): ParticipantPhotosPageData {
+function previewPageData(view: PhotosView, pages: number): ParticipantPhotosPageData {
   const photos: ParticipantPhoto[] = [
     { id: "preview-earth", name: "Opening moment", mimeType: "image/jpeg", thumbnailUrl: "/build-week-earth.jpg", viewUrl: "#", createdAt: "", width: 1600, height: 1067 },
     { id: "preview-horizon", name: "Build floor", mimeType: "image/jpeg", thumbnailUrl: "/build-week-horizon.jpg", viewUrl: "#", createdAt: "", width: 1200, height: 1600 },
@@ -462,7 +557,7 @@ function previewPageData(view: PhotosView, page: number): ParticipantPhotosPageD
     : photos;
   return {
     photos: source,
-    page: Math.min(page, 1),
+    page: Math.min(pages, 1),
     pageSize: 24,
     pageCount: 1,
     totalCount: source.length,
