@@ -80,6 +80,7 @@ export function App() {
     }} />;
   }
   if (mentorToken) {
+    if (photosRoute) return <ParticipantPhotosPage accessToken={mentorToken} view={photosRoute.view} page={photosRoute.page} clusterKey={photosRoute.clusterKey} />;
     return <MentorDashboard accessToken={mentorToken} onExit={() => {
       sessionStorage.removeItem(mentorSessionKey);
       setMentorToken(null);
