@@ -1,7 +1,7 @@
 import * as ort from "onnxruntime-web";
 
 import { alignFace, alignedSize, embeddingTensorData, normalizeEmbedding } from "./align";
-import type { Rgba } from "./imaging";
+import { laplacianSharpness, type Rgba } from "./imaging";
 import { decodeDetections } from "./scrfd";
 
 // buffalo_s: SCRFD-500M detector + MobileFaceNet ArcFace embedder — the same
@@ -19,6 +19,7 @@ ort.env.wasm.wasmPaths = `https://cdn.jsdelivr.net/npm/onnxruntime-web@${ortVers
 
 export interface DetectedFacePayload {
   score: number;
+  sharpness: number;
   box: number[];
   embedding: number[];
 }
@@ -79,6 +80,7 @@ export async function detectAndEmbed(imageBlob: Blob): Promise<DetectedFacePaylo
       const embedding = normalizeEmbedding((embeddingOutput[sessions.recognizer.outputNames[0]!] as { data: Float32Array }).data);
       faces.push({
         score: detection.score,
+        sharpness: laplacianSharpness(aligned),
         box: relativeBox(detection.box, bitmap.width, bitmap.height),
         embedding: [...embedding],
       });

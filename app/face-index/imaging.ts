@@ -27,6 +27,30 @@ export function bilinearSample(img: Rgba, x: number, y: number, out: [number, nu
   out[2] = data[p00 + 2]! * w00 + data[p10 + 2]! * w10 + data[p01 + 2]! * w01 + data[p11 + 2]! * w11;
 }
 
+// Variance of the 4-neighbor Laplacian over the grayscale image — the
+// standard blur metric; higher means sharper.
+export function laplacianSharpness(img: Rgba): number {
+  const { width, height, data } = img;
+  const interiorCount = (width - 2) * (height - 2);
+  if (interiorCount <= 0) return 0;
+  const gray = new Float32Array(width * height);
+  for (let i = 0; i < gray.length; i++) {
+    gray[i] = 0.299 * data[i * 4]! + 0.587 * data[i * 4 + 1]! + 0.114 * data[i * 4 + 2]!;
+  }
+  let sum = 0;
+  let sumOfSquares = 0;
+  for (let y = 1; y < height - 1; y++) {
+    for (let x = 1; x < width - 1; x++) {
+      const i = y * width + x;
+      const response = gray[i - 1]! + gray[i + 1]! + gray[i - width]! + gray[i + width]! - 4 * gray[i]!;
+      sum += response;
+      sumOfSquares += response * response;
+    }
+  }
+  const mean = sum / interiorCount;
+  return sumOfSquares / interiorCount - mean * mean;
+}
+
 function clampIndex(value: number, size: number): number {
   if (value < 0) return 0;
   if (value >= size) return size - 1;

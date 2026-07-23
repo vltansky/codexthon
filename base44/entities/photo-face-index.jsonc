@@ -14,6 +14,7 @@
           "face_id": { "type": "string" },
           "cluster_key": { "type": "string" },
           "score": { "type": "number" },
+          "sharpness": { "type": "number" },
           "box": { "type": "array", "items": { "type": "number" } },
           "embedding": { "type": "array", "items": { "type": "number" } }
         }

@@ -12,6 +12,7 @@ interface IndexedFace {
   face_id: string;
   cluster_key: string;
   score: number;
+  sharpness?: number;
   box: number[];
   embedding: number[];
 }
@@ -25,6 +26,7 @@ interface IndexRecord {
 
 export interface IngestFacePayload {
   score?: unknown;
+  sharpness?: unknown;
   box?: unknown;
   embedding?: unknown;
 }
@@ -151,7 +153,7 @@ export async function resetIndex(base44: any): Promise<{ deletedRecords: number;
   return { deletedRecords: records.length, deletedClusters: clusters.length };
 }
 
-function parseFaces(payload: unknown, photoId: string): IndexedFace[] {
+export function parseFaces(payload: unknown, photoId: string): IndexedFace[] {
   if (payload === undefined || payload === null) return [];
   if (!Array.isArray(payload) || payload.length > maximumFacesPerPhoto) throw new Error("Face payload is invalid");
   return payload.map((face: IngestFacePayload, faceIndex) => {
@@ -167,10 +169,13 @@ function parseFaces(payload: unknown, photoId: string): IndexedFace[] {
     const norm = Math.sqrt(embedding.reduce((sum: number, value: number) => sum + value * value, 0));
     if (Math.abs(norm - 1) > 0.05) throw new Error("Face embedding must be L2-normalized");
     const score = typeof face.score === "number" && Number.isFinite(face.score) ? clamp01(face.score) : 0;
+    const sharpness = face.sharpness;
+    const hasSharpness = typeof sharpness === "number" && Number.isFinite(sharpness) && sharpness >= 0;
     return {
       face_id: `${photoId}_${faceIndex}`,
       cluster_key: "",
       score: round(score, 100),
+      ...(hasSharpness ? { sharpness: round(sharpness, 100) } : {}),
       box: box.map((value: number) => round(value, 1e4)),
       embedding: embedding.map((value: number) => round(value, 1e4)),
     };
@@ -190,6 +195,17 @@ function assignCluster(embedding: Float32Array, knownFaces: { clusterKey: string
   return bestClusterKey || `person_${crypto.randomUUID().slice(0, 13)}`;
 }
 
+// Detection score measures face-ness, not quality — a large motion-blurred
+// face can outscore a sharp one, so the cover ranks by score weighted with
+// sharpness (variance of Laplacian, relative to the sharpest cluster member).
+export function pickCoverFace<T extends { score: number; sharpness?: number }>(faces: T[]): T {
+  const measured = faces.filter((face) => typeof face.sharpness === "number");
+  const maxSharpness = measured.reduce((max, face) => Math.max(max, face.sharpness ?? 0), 0);
+  const candidates = maxSharpness > 0 ? measured : faces;
+  const quality = (face: T) => maxSharpness > 0 ? face.score * ((face.sharpness ?? 0) / maxSharpness) : face.score;
+  return candidates.toSorted((first, second) => quality(second) - quality(first))[0]!;
+}
+
 async function upsertClusters(base44: any, records: IndexRecord[], touchedClusterKeys: Set<string>): Promise<number> {
   const existing = await base44.asServiceRole.entities.FaceCluster.filter({}, undefined, entityPageSize);
   if (touchedClusterKeys.size === 0) return existing.length;
@@ -201,7 +217,7 @@ async function upsertClusters(base44: any, records: IndexRecord[], touchedCluste
         .filter((face) => face.cluster_key === clusterKey)
         .map((face) => ({ ...face, photoId: record.photo_id }))
     );
-    const cover = memberFaces.toSorted((first, second) => second.score - first.score)[0];
+    const cover = pickCoverFace(memberFaces);
     const fields = {
       cluster_key: clusterKey,
       face_count: memberFaces.length,
