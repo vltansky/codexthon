@@ -1,8 +1,11 @@
 import { useEffect, useState } from "react";
+import { ArrowRight } from "lucide-react";
 
 import { base44 } from "./base44Client";
+import { internalLinkHandler } from "./navigation";
 import type { MentorPortalData } from "./types";
 import { unwrapBase44FunctionResponse } from "../src/base44-response";
+import { photosPagePath } from "../src/photo-gallery";
 
 export function MentorDashboard({ fallbackError }: { fallbackError?: string }) {
   const [data, setData] = useState<MentorPortalData | null>(null);
@@ -50,6 +53,11 @@ export function MentorDashboard({ fallbackError }: { fallbackError?: string }) {
         <p className="eyebrow">Mentor portal</p>
         <h1>Welcome, {firstName}.</h1>
         <p>{data.teams.length ? `You are mentoring ${data.teams.length} team${data.teams.length === 1 ? "" : "s"} tonight.` : "No teams are assigned to you yet. Check back after assignments are published."}</p>
+        <div className="mentor-links">
+          <a href={photosPagePath("all")} onClick={internalLinkHandler(photosPagePath("all"))}>Browse event photos <ArrowRight size={14} aria-hidden="true" /></a>
+          <a href={photosPagePath("people")} onClick={internalLinkHandler(photosPagePath("people"))}>Find your face <ArrowRight size={14} aria-hidden="true" /></a>
+          <a href={photosPagePath("mine")} onClick={internalLinkHandler(photosPagePath("mine"))}>My photos <ArrowRight size={14} aria-hidden="true" /></a>
+        </div>
       </section>
 
       <div className="mentor-teams-grid">

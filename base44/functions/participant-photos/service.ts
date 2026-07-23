@@ -74,11 +74,14 @@ export async function listParticipantPhotos(
   };
 }
 
+export type PhotoOwnerEntity = "Participant" | "Mentor";
+
 export async function saveParticipantPhotoSelection(
   base44: any,
   participant: any,
   requestedSelection: unknown,
   fetcher: typeof fetch = fetch,
+  ownerEntity: PhotoOwnerEntity = "Participant",
 ): Promise<{ selectedPhotoIds: string[] }> {
   const selectedPhotoIds = normalizeSelectedPhotoIds(requestedSelection);
   const storedIds = new Set(storedSelection(participant));
@@ -93,7 +96,7 @@ export async function saveParticipantPhotoSelection(
     if (checks.includes(false)) throw new Error("Selected photo is not in the event folder");
   }
 
-  await base44.asServiceRole.entities.Participant.update(participant.id, { selected_photo_ids: selectedPhotoIds });
+  await base44.asServiceRole.entities[ownerEntity].update(participant.id, { selected_photo_ids: selectedPhotoIds });
   return { selectedPhotoIds };
 }
 
@@ -101,6 +104,7 @@ export async function exportParticipantPhotosFolder(
   base44: any,
   participant: any,
   fetcher: typeof fetch = fetch,
+  ownerEntity: PhotoOwnerEntity = "Participant",
 ): Promise<{ folderLink: string; photoCount: number }> {
   const accessToken = await driveAccessToken(base44);
   const [photos, clusters] = await Promise.all([listDrivePhotos(accessToken, fetcher), loadFaceClusters(base44)]);
@@ -119,7 +123,7 @@ export async function exportParticipantPhotosFolder(
   if (!folder) {
     const parentFolderId = await findOrCreatePicksParentFolder(accessToken, fetcher);
     folder = await createSharedDriveFolder(accessToken, `Build Week photos – ${participant.display_name}`, parentFolderId, fetcher);
-    await base44.asServiceRole.entities.Participant.update(participant.id, { photos_folder_id: folder.id });
+    await base44.asServiceRole.entities[ownerEntity].update(participant.id, { photos_folder_id: folder.id });
   }
 
   const folderId = folder.id;
@@ -191,6 +195,7 @@ export async function claimFaceCluster(
   participant: any,
   clusterKey: unknown,
   claimed: boolean,
+  ownerEntity: PhotoOwnerEntity = "Participant",
 ): Promise<{ claimedClusterKeys: string[] }> {
   if (typeof clusterKey !== "string" || !clusterKey || clusterKey.length > 64) throw new Error("Face group is invalid");
   const current = claimedClusterKeys(participant);
@@ -204,7 +209,7 @@ export async function claimFaceCluster(
     ? [...new Set([...current, clusterKey])]
     : current.filter((key) => key !== clusterKey);
   if (next.length > maximumClaimedClusters) throw new Error("Too many claimed face groups");
-  await base44.asServiceRole.entities.Participant.update(participant.id, { claimed_cluster_keys: next });
+  await base44.asServiceRole.entities[ownerEntity].update(participant.id, { claimed_cluster_keys: next });
   return { claimedClusterKeys: next };
 }
 

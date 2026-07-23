@@ -149,12 +149,13 @@ function driveFile(index: number) {
   };
 }
 
-function fakeBase44(updates: unknown[] = [], clusters?: unknown[]) {
+function fakeBase44(updates: unknown[] = [], clusters?: unknown[], mentorUpdates: unknown[] = []) {
   return {
     asServiceRole: {
       connectors: { getConnection: async () => ({ accessToken: "drive-token" }) },
       entities: {
         Participant: { update: async (_id: string, data: unknown) => updates.push(data) },
+        Mentor: { update: async (_id: string, data: unknown) => mentorUpdates.push(data) },
         ...(clusters ? { FaceCluster: { filter: async () => clusters } } : {}),
       },
     },
@@ -387,4 +388,38 @@ test("export copies the union of selected and face-matched photos", async () => 
   assert.equal(result.photoCount, 2);
   const copiedIds = requests.filter(({ url }) => url.endsWith("/copy")).map(({ url }) => url.split("/").at(-2));
   assert.deepEqual(copiedIds.toSorted(), ["photo-1", "photo-2"]);
+});
+
+test("mentor owners save selections and claims onto the Mentor entity", async () => {
+  const { saveParticipantPhotoSelection, claimFaceCluster } = await import(serviceModuleUrl) as ServiceModule & {
+    saveParticipantPhotoSelection(base44: unknown, owner: unknown, selection: unknown, fetcher: typeof fetch, ownerEntity: string): Promise<{ selectedPhotoIds: string[] }>;
+    claimFaceCluster(base44: unknown, owner: unknown, clusterKey: unknown, claimed: boolean, ownerEntity: string): Promise<{ claimedClusterKeys: string[] }>;
+  };
+  const participantUpdates: unknown[] = [];
+  const mentorUpdates: unknown[] = [];
+  const clusters = [{ cluster_key: "person_a", photo_ids: ["photo-1"], hidden: false }];
+  const mentor = { id: "mentor-1", mentor_key: "m1", display_name: "Morgan", selected_photo_ids: ["photo-1", "photo-2"], claimed_cluster_keys: [] };
+
+  const saved = await saveParticipantPhotoSelection(
+    fakeBase44(participantUpdates, clusters, mentorUpdates),
+    mentor,
+    ["photo-2"],
+    (async () => Response.json({})) as typeof fetch,
+    "Mentor",
+  );
+  assert.deepEqual(saved.selectedPhotoIds, ["photo-2"]);
+
+  const claimed = await claimFaceCluster(
+    fakeBase44(participantUpdates, clusters, mentorUpdates),
+    mentor,
+    "person_a",
+    true,
+    "Mentor",
+  );
+  assert.deepEqual(claimed.claimedClusterKeys, ["person_a"]);
+  assert.deepEqual(participantUpdates, []);
+  assert.deepEqual(mentorUpdates, [
+    { selected_photo_ids: ["photo-2"] },
+    { claimed_cluster_keys: ["person_a"] },
+  ]);
 });

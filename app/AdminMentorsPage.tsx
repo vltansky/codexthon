@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
 
 import { normalizeParticipantName, parseMentorTeamCsv } from "../src/csv";
-import { unwrapBase44FunctionResponse } from "../src/base44-response";
 import { AdminHeader, type AdminPage } from "./AdminHeader";
 import { base44 } from "./base44Client";
 import { downloadCsv } from "./lib/download-csv";
@@ -29,7 +28,6 @@ export function AdminMentorsPage({ user, onNavigate }: { user: AppUser; onNaviga
   const [form, setForm] = useState<MentorForm>(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
-  const [pendingInviteAll, setPendingInviteAll] = useState(false);
   const [query, setQuery] = useState("");
   const [notice, setNotice] = useState("Loading mentors…");
   const [busy, setBusy] = useState(false);
@@ -134,33 +132,21 @@ export function AdminMentorsPage({ user, onNavigate }: { user: AppUser; onNaviga
     });
   }
 
-  async function inviteMentors(inviteTargets: MentorRecord[]) {
+  async function inviteMentor(mentor: MentorRecord) {
     await runMutation(async () => {
-      const response = await base44.functions.invoke("mentor-invite", { mentorIds: inviteTargets.map(({ id }) => id) });
-      const results = unwrapBase44FunctionResponse<{ results: Array<{ mentorId: string; status: string; error?: string }> }>(response).results;
-      const sent = results.filter(({ status }) => status === "sent").length;
-      const failures = results.filter(({ status }) => status !== "sent");
-      const failureDetail = failures[0]?.error ? ` — ${failures[0].error}` : "";
-      setNotice(failures.length
-        ? `Invited ${sent} mentor${sent === 1 ? "" : "s"}; ${failures.length} not sent${failureDetail}`
-        : `Invited ${sent} mentor${sent === 1 ? "" : "s"}`);
+      await navigator.clipboard.writeText(window.location.origin);
+      await mentorEntity.update(mentor.id, { invited_at: new Date().toISOString() });
+      setNotice(`Copied the portal link for ${mentor.display_name} — paste it to them directly`);
     });
   }
 
-  async function inviteAll() {
-    const inviteTargets = mentors.filter((mentor) => mentor.email && !mentor.invited_at);
-    if (!inviteTargets.length) {
-      setNotice("Every mentor with an email is already invited");
-      setPendingInviteAll(false);
-      return;
+  async function copyPortalLink() {
+    try {
+      await navigator.clipboard.writeText(window.location.origin);
+      setNotice("Copied the mentor portal link");
+    } catch {
+      setNotice("Could not copy the portal link");
     }
-    if (!pendingInviteAll) {
-      setPendingInviteAll(true);
-      setNotice(`Select again to email ${inviteTargets.length} uninvited mentor${inviteTargets.length === 1 ? "" : "s"}`);
-      return;
-    }
-    setPendingInviteAll(false);
-    await inviteMentors(inviteTargets);
   }
 
   async function runMutation(action: () => Promise<void>) {
@@ -238,14 +224,14 @@ export function AdminMentorsPage({ user, onNavigate }: { user: AppUser; onNaviga
         <form className="directory-form" autoComplete="off" onSubmit={(event) => void saveMentor(event)}>
           <div><p className="section-kicker">{editingId ? "Edit mentor" : "New mentor"}</p><h2>{editingId ? "Update details" : "Add mentor"}</h2></div>
           <label>Name<input required value={form.displayName} onChange={(event) => setForm({ ...form, displayName: event.target.value })} /></label>
-          <label>Email<input type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} /></label>
+          <label>Email<input type="email" required value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} /></label>
           <label>Phone<input type="tel" value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} /></label>
           <label>LinkedIn<input type="url" placeholder="https://linkedin.com/in/..." value={form.linkedin} onChange={(event) => setForm({ ...form, linkedin: event.target.value })} /></label>
           <label>Details<textarea rows={4} value={form.details} onChange={(event) => setForm({ ...form, details: event.target.value })} /></label>
           <div className="directory-form-actions"><button className="primary-button" disabled={busy}>{editingId ? "Save mentor" : "Add mentor"}</button>{editingId && <button className="secondary-button" type="button" onClick={resetForm}>Cancel</button>}</div>
         </form>
         <div className="directory-list">
-          <div className="directory-toolbar"><div><p className="section-kicker">{mentors.length} mentors</p><h2>All mentors</h2></div><div className="directory-tools"><input type="search" placeholder="Search mentors" value={query} onChange={(event) => setQuery(event.target.value)} /><button className={`export-button${pendingInviteAll ? " confirm" : ""}`} type="button" disabled={busy || !mentors.length} onClick={() => void inviteAll()}>{pendingInviteAll ? "Confirm invite all" : "Invite all"}</button><button className="export-button" type="button" disabled={!visibleMentors.length} onClick={exportMentors}>Export CSV</button></div></div>
+          <div className="directory-toolbar"><div><p className="section-kicker">{mentors.length} mentors</p><h2>All mentors</h2></div><div className="directory-tools"><input type="search" placeholder="Search mentors" value={query} onChange={(event) => setQuery(event.target.value)} /><button className="export-button" type="button" onClick={() => void copyPortalLink()}>Copy portal link</button><button className="export-button" type="button" disabled={!visibleMentors.length} onClick={exportMentors}>Export CSV</button></div></div>
           {visibleMentors.map((mentor) => {
             const teams = [...(assignedTeams.get(mentor.mentor_key)?.entries() ?? [])]
               .sort(([, a], [, b]) => a.teamName.localeCompare(b.teamName));
@@ -259,7 +245,7 @@ export function AdminMentorsPage({ user, onNavigate }: { user: AppUser; onNaviga
                   ? <ul>{teams.map(([teamKey, { teamName, members }]) => <li key={teamKey}><a className="team-link" href={adminTeamPath(teamKey)} onClick={internalLinkHandler(adminTeamPath(teamKey))}>{teamName}</a> <small>({members})</small></li>)}</ul>
                   : <span>No teams assigned</span>}
               </div>
-              <div className="directory-row-actions"><button disabled={busy || !mentor.email} title={mentor.email ? undefined : "Add an email first"} onClick={() => void inviteMentors([mentor])}>{mentor.invited_at ? "Re-invite" : "Invite"}</button><button disabled={busy} onClick={() => editMentor(mentor)}>Edit</button><button className={pendingDeleteId === mentor.id ? "confirm" : ""} disabled={busy} onClick={() => void deleteMentor(mentor)}>{pendingDeleteId === mentor.id ? "Confirm delete" : "Delete"}</button></div>
+              <div className="directory-row-actions"><button disabled={busy} onClick={() => void inviteMentor(mentor)}>{mentor.invited_at ? "Re-invite" : "Invite"}</button><button disabled={busy} onClick={() => editMentor(mentor)}>Edit</button><button className={pendingDeleteId === mentor.id ? "confirm" : ""} disabled={busy} onClick={() => void deleteMentor(mentor)}>{pendingDeleteId === mentor.id ? "Confirm delete" : "Delete"}</button></div>
             </article>;
           })}
           {!visibleMentors.length && <p className="directory-empty">No mentors match this search.</p>}

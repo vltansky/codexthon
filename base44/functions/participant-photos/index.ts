@@ -2,9 +2,21 @@ import { createClientFromRequest } from "npm:@base44/sdk";
 
 import { verifyAccessToken } from "./access-link.ts";
 import { toPhotoFunctionError } from "./errors.ts";
-import { claimFaceCluster, exportParticipantPhotosFolder, listParticipantPhotos, listPeopleClusters, saveParticipantPhotoSelection } from "./service.ts";
+import {
+  claimFaceCluster,
+  exportParticipantPhotosFolder,
+  listParticipantPhotos,
+  listPeopleClusters,
+  saveParticipantPhotoSelection,
+  type PhotoOwnerEntity,
+} from "./service.ts";
 
 const securityHeaders = { "Cache-Control": "no-store", "Referrer-Policy": "no-referrer" };
+
+interface PhotoOwner {
+  record: any;
+  entityName: PhotoOwnerEntity;
+}
 
 Deno.serve(async (request) => {
   try {
@@ -18,36 +30,36 @@ Deno.serve(async (request) => {
       clusterKey?: unknown;
     };
     const base44 = createClientFromRequest(request);
-    const participant = body.token
-      ? await participantFromAccessLink(base44, body.token)
-      : await participantFromAuthenticatedUser(base44);
+    const owner: PhotoOwner = body.token
+      ? { record: await participantFromAccessLink(base44, body.token), entityName: "Participant" }
+      : await ownerFromAuthenticatedUser(base44);
 
     if (body.action === "save" || (body.action === undefined && body.selectedPhotoIds !== undefined)) {
       return Response.json(
-        await saveParticipantPhotoSelection(base44, participant, body.selectedPhotoIds),
+        await saveParticipantPhotoSelection(base44, owner.record, body.selectedPhotoIds, fetch, owner.entityName),
         { headers: securityHeaders },
       );
     }
     if (body.action === "people") {
       return Response.json(
-        await listPeopleClusters(base44, participant),
+        await listPeopleClusters(base44, owner.record),
         { headers: securityHeaders },
       );
     }
     if (body.action === "claim" || body.action === "unclaim") {
       return Response.json(
-        await claimFaceCluster(base44, participant, body.clusterKey, body.action === "claim"),
+        await claimFaceCluster(base44, owner.record, body.clusterKey, body.action === "claim", owner.entityName),
         { headers: securityHeaders },
       );
     }
     if (body.action === "export") {
       return Response.json(
-        await exportParticipantPhotosFolder(base44, participant),
+        await exportParticipantPhotosFolder(base44, owner.record, fetch, owner.entityName),
         { headers: securityHeaders },
       );
     }
     return Response.json(
-      await listParticipantPhotos(base44, participant, body),
+      await listParticipantPhotos(base44, owner.record, body),
       { headers: securityHeaders },
     );
   } catch (error) {
@@ -75,12 +87,20 @@ async function participantFromAccessLink(base44: any, token: string) {
   return participant;
 }
 
-async function participantFromAuthenticatedUser(base44: any) {
+async function ownerFromAuthenticatedUser(base44: any): Promise<PhotoOwner> {
   const user = await base44.auth.me();
   if (!user) throw new Error("Authentication required");
   const email = user.email.trim().toLowerCase();
   const participants = await base44.asServiceRole.entities.Participant.filter({ email }, undefined, 1);
   const participant = participants[0];
-  if (!participant || participant.active === false) throw new Error("Participant access unavailable");
-  return participant;
+  if (participant && participant.active !== false) return { record: participant, entityName: "Participant" };
+
+  // Signed-in emails that are not on the participant list may belong to a
+  // mentor; admin-entered mentor emails carry mixed casing, so match in code.
+  const mentors = await base44.asServiceRole.entities.Mentor.list("display_name", 1000);
+  const mentor = mentors.find((candidate: any) =>
+    typeof candidate.email === "string" && candidate.email.trim().toLowerCase() === email
+  );
+  if (mentor) return { record: mentor, entityName: "Mentor" };
+  throw new Error("Participant access unavailable");
 }

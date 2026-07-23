@@ -9,7 +9,18 @@
     "phone": { "type": "string" },
     "details": { "type": "string" },
     "linkedin": { "type": "string", "format": "uri" },
-    "invited_at": { "type": "string" }
+    "invited_at": { "type": "string" },
+    "selected_photo_ids": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": []
+    },
+    "claimed_cluster_keys": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": []
+    },
+    "photos_folder_id": { "type": "string" }
   },
   "required": ["mentor_key", "display_name"],
   "rls": {
