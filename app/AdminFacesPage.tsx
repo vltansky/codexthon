@@ -133,17 +133,19 @@ export function AdminFacesPage({ user, onNavigate }: { user: AppUser; onNavigate
     try {
       let analyzedTotal = 0;
       let failedTotal = 0;
-      let previousRemaining = Infinity;
+      let cursor = "";
       // The server analyzes a small batch per request to stay inside the
-      // function timeout; keep calling until it reports done.
+      // function timeout; keep calling until it reports done. Force remeasures
+      // every photo so a metric change reaches records stamped earlier.
       while (true) {
         const result = await invokeFaceIndex<{
           done: boolean;
           analyzedPhotos: number;
           failedPhotos: number;
           remainingPhotos: number;
+          cursor?: string;
           clusterCount?: number;
-        }>({ action: "recompute" });
+        }>({ action: "recompute", force: true, ...(cursor ? { cursor } : {}) });
         analyzedTotal += result.analyzedPhotos;
         failedTotal += result.failedPhotos;
         if (result.done) {
@@ -151,8 +153,8 @@ export function AdminFacesPage({ user, onNavigate }: { user: AppUser; onNavigate
           await refresh(`Refreshed covers and sorting for ${result.clusterCount} groups (${analyzedTotal} photos analyzed${failed})`);
           break;
         }
-        if (result.remainingPhotos >= previousRemaining) throw new Error("Cover refresh is not making progress; please try again");
-        previousRemaining = result.remainingPhotos;
+        if (!result.cursor || result.cursor <= cursor) throw new Error("Cover refresh is not making progress; please try again");
+        cursor = result.cursor;
         setNotice(`Refreshing group covers… ${analyzedTotal + failedTotal} photos analyzed, ${result.remainingPhotos} remaining`);
       }
     } catch (caught) {

@@ -160,14 +160,16 @@ export async function listClusters(base44: any) {
 // Each call handles one small batch; the caller loops until done.
 const recomputeBatchLimit = 10;
 
-// Backfills sharpness for faces indexed before the browser reported it (from
-// Drive thumbnail crops), one batch per call. Once nothing is left to
-// backfill, the final call re-picks every cover and centroid in place.
-// Cluster keys never change, so participant claims survive — unlike a reset.
+// Backfills or remeasures face sharpness from Drive thumbnail crops, one
+// batch per call; `cursor` (last processed photo id) lets a forced remeasure
+// walk records it already stamped. Once nothing is left, the final call
+// re-picks every cover and centroid in place. Cluster keys never change, so
+// participant claims survive — unlike a reset.
 export async function recomputeClusters(
   base44: any,
+  options: { force?: boolean; cursor?: string } = {},
   fetcher: typeof fetch = fetch,
-): Promise<{ done: boolean; analyzedPhotos: number; failedPhotos: number; remainingPhotos: number; clusterCount?: number }> {
+): Promise<{ done: boolean; analyzedPhotos: number; failedPhotos: number; remainingPhotos: number; cursor?: string; clusterCount?: number }> {
   // jpeg-js loads lazily: node-based tests import this module without npm: support.
   const { default: jpeg } = await import("npm:jpeg-js@0.4.4");
   // The cached listing keeps the ~20-call batch loop from re-walking the
@@ -177,11 +179,15 @@ export async function recomputeClusters(
     listIndexRecords(base44),
   ]);
   const photoById = new Map(photos.map((photo) => [photo.id, photo]));
-  const pending = records.filter((record) => {
-    const faces = record.faces ?? [];
-    return faces.length > 0 && faces.some((face) => typeof face.sharpness !== "number") &&
-      record.id && photoById.has(record.photo_id);
-  });
+  const cursor = typeof options.cursor === "string" ? options.cursor : "";
+  const pending = records
+    .filter((record) => {
+      const faces = record.faces ?? [];
+      if (faces.length === 0 || !record.id || !photoById.has(record.photo_id)) return false;
+      return options.force ? true : faces.some((face) => typeof face.sharpness !== "number");
+    })
+    .toSorted((first, second) => first.photo_id.localeCompare(second.photo_id))
+    .filter((record) => record.photo_id > cursor);
 
   if (pending.length === 0) {
     const touchedClusterKeys = new Set(
@@ -194,7 +200,8 @@ export async function recomputeClusters(
 
   let analyzedPhotos = 0;
   let failedPhotos = 0;
-  for (const record of pending.slice(0, recomputeBatchLimit)) {
+  const batch = pending.slice(0, recomputeBatchLimit);
+  for (const record of batch) {
     const faces = record.faces ?? [];
     try {
       const bytes = await fetchThumbnail(photoById.get(record.photo_id)!.thumbnailUrl, fetcher);
@@ -215,7 +222,8 @@ export async function recomputeClusters(
     done: false,
     analyzedPhotos,
     failedPhotos,
-    remainingPhotos: pending.length - Math.min(pending.length, recomputeBatchLimit),
+    remainingPhotos: pending.length - batch.length,
+    cursor: batch[batch.length - 1]!.photo_id,
   };
 }
 

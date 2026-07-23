@@ -43,7 +43,11 @@ Deno.serve(async (request) => {
       return Response.json(await listClusters(base44), { headers: securityHeaders });
     }
     if (body.action === "recompute") {
-      return Response.json(await recomputeClusters(base44), { headers: securityHeaders });
+      const options = {
+        force: (body as { force?: unknown }).force === true,
+        ...(typeof (body as { cursor?: unknown }).cursor === "string" ? { cursor: (body as { cursor?: unknown }).cursor as string } : {}),
+      };
+      return Response.json(await recomputeClusters(base44, options), { headers: securityHeaders });
     }
     if (body.action === "merge-candidates") {
       return Response.json(await listMergeCandidates(base44), { headers: securityHeaders });

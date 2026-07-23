@@ -52,6 +52,19 @@ test("faceSharpness measures only the requested box", async () => {
   assert.equal(flatHalf, 0);
 });
 
+test("faceSharpness ranks a small sharp face above a large defocused face", async () => {
+  const { faceSharpness } = (await import(sharpnessModuleUrl)) as SharpnessModule;
+  // Small box holds crisp 1px detail; large box holds only slow gradients,
+  // like a big face that missed focus. Size must not beat sharpness.
+  const scene = grayImage(256, 256, (x, y) => {
+    if (x < 24 && y < 24) return (x + y) % 2 ? 255 : 0;
+    return Math.round(128 + 100 * Math.sin(x / 40) * Math.sin(y / 40));
+  });
+  const smallSharp = faceSharpness(scene, [0, 0, 24 / 256, 24 / 256]);
+  const largeBlurry = faceSharpness(scene, [0.25, 0.25, 1, 1]);
+  assert.ok(smallSharp > largeBlurry);
+});
+
 test("faceSharpness returns zero for a degenerate box", async () => {
   const { faceSharpness } = (await import(sharpnessModuleUrl)) as SharpnessModule;
   const image = grayImage(16, 16, (x) => x * 16);

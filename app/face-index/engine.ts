@@ -78,10 +78,11 @@ export async function detectAndEmbed(imageBlob: Blob): Promise<DetectedFacePaylo
         [sessions.recognizer.inputNames[0]!]: new ort.Tensor("float32", embeddingTensorData(aligned), [1, 3, alignedSize, alignedSize]),
       });
       const embedding = normalizeEmbedding((embeddingOutput[sessions.recognizer.outputNames[0]!] as { data: Float32Array }).data);
+      const box = relativeBox(detection.box, bitmap.width, bitmap.height);
       faces.push({
         score: detection.score,
-        sharpness: laplacianSharpness(aligned),
-        box: relativeBox(detection.box, bitmap.width, bitmap.height),
+        sharpness: laplacianSharpness(fullImage, box),
+        box,
         embedding: [...embedding],
       });
     }
