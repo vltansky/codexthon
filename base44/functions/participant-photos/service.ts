@@ -16,7 +16,8 @@ import {
 import { orderPeopleClusters } from "./people-order.ts";
 
 const defaultPageSize = 24;
-const maximumPageSize = 60;
+// 240 = 10 pages of 24, the client's restore cap after a refresh mid-scroll.
+const maximumPageSize = 240;
 
 export interface PhotoListRequest {
   view?: unknown;

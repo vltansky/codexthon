@@ -210,6 +210,28 @@ test("clamps out-of-range pages instead of returning an empty grid", async () =>
   assert.equal(result.photos.length, 6);
 });
 
+test("honors a restore-sized page so a refreshed infinite scroll loads in one request", async () => {
+  const { listParticipantPhotos } = await import(serviceModuleUrl) as ServiceModule;
+  const result = await listParticipantPhotos(
+    fakeBase44(),
+    { id: "participant-1", selected_photo_ids: [] },
+    { page: 1, pageSize: 240 },
+    listFetcher(300),
+  );
+
+  assert.equal(result.pageSize, 240);
+  assert.equal(result.photos.length, 240);
+  assert.equal(result.pageCount, 2);
+
+  const clamped = await listParticipantPhotos(
+    fakeBase44(),
+    { id: "participant-1", selected_photo_ids: [] },
+    { page: 1, pageSize: 500 },
+    listFetcher(300),
+  );
+  assert.equal(clamped.pageSize, 240);
+});
+
 test("mine view returns only the participant's selected photos", async () => {
   const { listParticipantPhotos } = await import(serviceModuleUrl) as ServiceModule;
   const result = await listParticipantPhotos(
