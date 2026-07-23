@@ -18,3 +18,11 @@ export function writeGalleryCache(cacheKey: string, entry: PhotoGalleryCacheEntr
     // Quota failures only cost the instant rehydrate; the URL depth still restores.
   }
 }
+
+export function clearGalleryCache(cacheKey: string): void {
+  try {
+    sessionStorage.removeItem(cacheKey);
+  } catch {
+    // Same tolerance as writes: losing the cache only costs the instant rehydrate.
+  }
+}
