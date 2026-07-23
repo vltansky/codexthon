@@ -20,6 +20,12 @@ After check-in, the portal unlocks personal Codex and API credit links.
 
 ![Unlocked promo claim area with synthetic credit links](docs/screenshots/promo-claim.webp)
 
+### Face discovery
+
+Participants and mentors can browse detected people, open every photo in a face group, and claim their own group so matching images automatically appear under “My photos.”
+
+![Face discovery with fictional illustrated demo people](docs/screenshots/face-discovery.webp)
+
 ### Admin dashboard
 
 Operators can track arrivals and portal activity, import event data, manage credits, and deliver personal links.
@@ -164,6 +170,8 @@ Analytics events exclude participant identifiers, URLs, personal keys, promo val
 - Discover images in nested folders with bounded traversal and paginate large collections
 - Preserve image orientation and link each gallery item to its original Drive file
 - Save each participant's personal picks without modifying or copying source files
+- Group detected faces across event photos into a browsable people gallery
+- Let participants and mentors claim their face group and collect matching images under “My photos”
 - Validate newly selected images against the configured event folder tree
 - Create or reuse a participant-specific folder under a shared photo-picks parent folder
 - Reconcile that folder on demand by copying new picks and trashing deselected copies
@@ -171,6 +179,10 @@ Analytics events exclude participant identifiers, URLs, personal keys, promo val
 - Share participant folders as read-only to anyone with the link
 
 The Google Drive connector requests Drive access and creates participant folders in the connected account. Use a dedicated event account and folder. Treat participant folder links as sensitive because they are accessible to anyone who has the link.
+
+To enable face discovery, open `/admin/faces` after configuring the Drive folder and select **Index photos**. Detection runs in the admin browser, while face embeddings and group metadata are stored in admin-only Base44 entities. Keep the tab open while indexing; stopped runs can continue later.
+
+Face embeddings are biometric data. Enable this feature only with appropriate attendee notice or consent, a documented retention policy, and compliance with applicable privacy law. Admins can reset the index from `/admin/faces`.
 
 ### Admin MCP
 
@@ -391,7 +403,6 @@ See [SECURITY.md](SECURITY.md) for private vulnerability reporting.
 
 ## Roadmap ideas
 
-- Group event photos by detected faces, with an explicit consent and privacy model
 - Add scoring, ranking, deliberation, and results to the existing judging assignment pages
 - Add a live Luma integration instead of CSV-only import
 - Add a complete email/password login interface
