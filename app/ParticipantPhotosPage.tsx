@@ -10,6 +10,7 @@ import { appendPhotos, clampRestoreDepth, photosPagePath, photosPageSize, toggle
 import { readGalleryCache, writeGalleryCache } from "./photoGalleryCache";
 import { photoSelectionTarget } from "../src/participant-analytics";
 import { ParticipantPeopleGrid } from "./ParticipantPeopleGrid";
+import { SelfieFinder } from "./SelfieFinder";
 import "./participant-photos.css";
 
 interface ParticipantPhotosPageProps {
@@ -203,7 +204,9 @@ export function ParticipantPhotosPage({ view, pages, clusterKey = "", accessToke
     }, { rootMargin: "1200px 0px" });
     observer.observe(sentinel);
     return () => observer.disconnect();
-  }, [reachedEnd, loadingPage, view, clusterKey, preview]);
+    // loadingMore re-arms the observer after each append: re-observing fires
+    // immediately, so loading chains while the sentinel stays inside the margin.
+  }, [reachedEnd, loadingPage, loadingMore, view, clusterKey, preview]);
 
   useEffect(() => {
     // Scroll depth is saved per route so a refresh can land back on the same
@@ -462,6 +465,14 @@ export function ParticipantPhotosPage({ view, pages, clusterKey = "", accessToke
         ) : (
           <>
             <p className="people-hint">Tap a face to see every photo of that person. Spot yourself? Claim the face and those photos join “My photos” automatically.</p>
+            {!preview ? (
+              <SelfieFinder
+                accessToken={accessToken}
+                claimedClusterKeys={peopleData.claimedClusterKeys}
+                claimBusyKey={claimBusyKey}
+                onToggleClaim={(person) => void toggleClaim(person.clusterKey, person.claimed)}
+              />
+            ) : null}
             <ParticipantPeopleGrid
               people={peopleData.people}
               claimBusyKey={claimBusyKey}
