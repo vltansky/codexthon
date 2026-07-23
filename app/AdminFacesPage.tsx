@@ -57,9 +57,10 @@ export function AdminFacesPage({ user, onNavigate }: { user: AppUser; onNavigate
   const [refreshingCovers, setRefreshingCovers] = useState(false);
   const [mergeCandidates, setMergeCandidates] = useState<MergeCandidate[] | null>(null);
   const [findingMerges, setFindingMerges] = useState(false);
-  const [mergingKey, setMergingKey] = useState("");
+  const [pendingMerges, setPendingMerges] = useState(0);
   const [notice, setNotice] = useState("Loading face index status…");
   const stopRef = useRef(false);
+  const mergeQueueRef = useRef<Promise<void>>(Promise.resolve());
 
   useEffect(() => {
     // Index state lives in Base44 entities and must be loaded after authentication.
@@ -180,24 +181,32 @@ export function AdminFacesPage({ user, onNavigate }: { user: AppUser; onNavigate
     }
   }
 
-  async function mergePair(candidate: MergeCandidate) {
-    setMergingKey(candidate.source.clusterKey);
-    try {
-      const result = await invokeFaceIndex<{ mergedFaces: number; migratedClaims: number }>({
-        action: "merge",
-        sourceKey: candidate.source.clusterKey,
-        targetKey: candidate.target.clusterKey,
+  function mergePair(candidate: MergeCandidate) {
+    // Optimistic: the pair leaves the list immediately and the admin keeps
+    // triaging; merges run sequentially in the background because concurrent
+    // merges could race on shared index records.
+    setMergeCandidates((current) => (current ?? []).filter((pair) =>
+      pair.source.clusterKey !== candidate.source.clusterKey &&
+      pair.target.clusterKey !== candidate.source.clusterKey
+    ));
+    setPendingMerges((count) => count + 1);
+    mergeQueueRef.current = mergeQueueRef.current
+      .then(async () => {
+        const result = await invokeFaceIndex<{ mergedFaces: number; migratedClaims: number }>({
+          action: "merge",
+          sourceKey: candidate.source.clusterKey,
+          targetKey: candidate.target.clusterKey,
+        });
+        await refresh(`Merged ${result.mergedFaces} face${result.mergedFaces === 1 ? "" : "s"}${result.migratedClaims ? ` and moved ${result.migratedClaims} claim${result.migratedClaims === 1 ? "" : "s"}` : ""}`);
+      })
+      .catch((caught) => {
+        // Failed merges return to the list so the decision is not lost.
+        setMergeCandidates((current) => [candidate, ...(current ?? [])]);
+        setNotice(caught instanceof Error ? caught.message : "Merge failed");
+      })
+      .finally(() => {
+        setPendingMerges((count) => count - 1);
       });
-      setMergeCandidates((current) => (current ?? []).filter((pair) =>
-        pair.source.clusterKey !== candidate.source.clusterKey &&
-        pair.target.clusterKey !== candidate.source.clusterKey
-      ));
-      await refresh(`Merged ${result.mergedFaces} face${result.mergedFaces === 1 ? "" : "s"}${result.migratedClaims ? ` and moved ${result.migratedClaims} claim${result.migratedClaims === 1 ? "" : "s"}` : ""}`);
-    } catch (caught) {
-      setNotice(caught instanceof Error ? caught.message : "Merge failed");
-    } finally {
-      setMergingKey("");
-    }
   }
 
   function dismissPair(candidate: MergeCandidate) {
@@ -258,7 +267,10 @@ export function AdminFacesPage({ user, onNavigate }: { user: AppUser; onNavigate
           <div className="section-heading">
             <div><p className="section-kicker">Review</p><h2>Probable duplicates</h2></div>
           </div>
-          <p className="face-index-hint">Same person split by pose or lighting. Merging moves all photos and claims onto the larger group; this cannot be undone.</p>
+          <p className="face-index-hint">
+            Same person split by pose or lighting. Merging moves all photos and claims onto the larger group; this cannot be undone.
+            {pendingMerges > 0 ? ` Applying ${pendingMerges} merge${pendingMerges === 1 ? "" : "s"} in the background…` : ""}
+          </p>
           <div className="merge-pair-list">
             {mergeCandidates.map((candidate) => (
               <div className="merge-pair" key={`${candidate.source.clusterKey}:${candidate.target.clusterKey}`}>
@@ -274,10 +286,8 @@ export function AdminFacesPage({ user, onNavigate }: { user: AppUser; onNavigate
                 </div>
                 <span className="merge-pair-similarity">{Math.round(candidate.similarity * 100)}% match</span>
                 <div className="merge-pair-actions">
-                  <button className="primary" type="button" disabled={Boolean(mergingKey)} onClick={() => void mergePair(candidate)}>
-                    {mergingKey === candidate.source.clusterKey ? "Merging…" : "Same person"}
-                  </button>
-                  <button type="button" disabled={Boolean(mergingKey)} onClick={() => dismissPair(candidate)}>Different people</button>
+                  <button className="primary" type="button" onClick={() => mergePair(candidate)}>Same person</button>
+                  <button type="button" onClick={() => dismissPair(candidate)}>Different people</button>
                 </div>
               </div>
             ))}
