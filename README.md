@@ -22,7 +22,7 @@ After check-in, the portal unlocks personal Codex and API credit links.
 
 ### Face discovery
 
-Participants and mentors can browse detected people, open every photo in a face group, and claim their own group so matching images automatically appear under “My photos.”
+Participants and mentors can browse detected people, open every photo in a face group, and claim their own group so matching images automatically appear under “My photos.” A selfie shortcut suggests likely matches: the photo is analyzed on the participant's device and never uploaded.
 
 ![Face discovery with fictional illustrated demo people](docs/screenshots/face-discovery.webp)
 
@@ -172,6 +172,7 @@ Analytics events exclude participant identifiers, URLs, personal keys, promo val
 - Save each participant's personal picks without modifying or copying source files
 - Group detected faces across event photos into a browsable people gallery
 - Let participants and mentors claim their face group and collect matching images under “My photos”
+- Suggest likely face groups from a selfie embedded on the participant's device, without uploading or storing the selfie
 - Validate newly selected images against the configured event folder tree
 - Create or reuse a participant-specific folder under a shared photo-picks parent folder
 - Reconcile that folder on demand by copying new picks and trashing deselected copies
