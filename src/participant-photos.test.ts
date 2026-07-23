@@ -24,6 +24,9 @@ interface ServiceModule {
   exportParticipantPhotosFolder(base44: unknown, participant: unknown, fetcher: typeof fetch): Promise<{ folderLink: string; photoCount: number }>;
   listPeopleClusters(base44: unknown, participant: unknown, fetcher: typeof fetch): Promise<{ people: Array<{ clusterKey: string; photoCount: number; claimed: boolean }>; claimedClusterKeys: string[] }>;
   claimFaceCluster(base44: unknown, participant: unknown, clusterKey: unknown, claimed: boolean): Promise<{ claimedClusterKeys: string[] }>;
+  matchSelfieClusters(base44: unknown, participant: unknown, embedding: unknown, fetcher: typeof fetch): Promise<{
+    suggestions: Array<{ clusterKey: string; faceCount: number; photoCount: number; coverThumbnailUrl: string; claimed: boolean; similarity: number; strength: string }>;
+  }>;
 }
 
 interface RecordedRequest {
@@ -149,7 +152,7 @@ function driveFile(index: number) {
   };
 }
 
-function fakeBase44(updates: unknown[] = [], clusters?: unknown[], mentorUpdates: unknown[] = []) {
+function fakeBase44(updates: unknown[] = [], clusters?: unknown[], mentorUpdates: unknown[] = [], faceRecords?: unknown[]) {
   return {
     asServiceRole: {
       connectors: { getConnection: async () => ({ accessToken: "drive-token" }) },
@@ -157,9 +160,16 @@ function fakeBase44(updates: unknown[] = [], clusters?: unknown[], mentorUpdates
         Participant: { update: async (_id: string, data: unknown) => updates.push(data) },
         Mentor: { update: async (_id: string, data: unknown) => mentorUpdates.push(data) },
         ...(clusters ? { FaceCluster: { filter: async () => clusters } } : {}),
+        ...(faceRecords ? { PhotoFaceIndex: { filter: async () => faceRecords } } : {}),
       },
     },
   };
+}
+
+function probeEmbedding(axis: number, weight = 1): number[] {
+  const embedding = Array.from({ length: 512 }, () => 0);
+  embedding[axis] = weight;
+  return embedding;
 }
 
 function listFetcher(fileCount: number): typeof fetch {
@@ -375,6 +385,58 @@ test("people listing hides single-face groups unless the viewer claimed them", a
     listFetcher(5),
   );
   assert.deepEqual(result.people.map(({ clusterKey }) => clusterKey).toSorted(), ["person_claimed_single", "person_real"]);
+});
+
+test("selfie match suggests visible clusters and hidden singletons, ranked by similarity", async () => {
+  const { matchSelfieClusters } = await import(serviceModuleUrl) as ServiceModule;
+  const clusters = [
+    { cluster_key: "person_close", face_count: 3, photo_ids: ["photo-1", "photo-2"], cover_photo_id: "photo-1", cover_box: [0.1, 0.1, 0.2, 0.3], hidden: false },
+    { cluster_key: "person_single", face_count: 1, photo_ids: ["photo-3"], cover_photo_id: "photo-3", cover_box: [0, 0, 1, 1], hidden: false },
+    { cluster_key: "person_admin_hidden", face_count: 6, photo_ids: ["photo-4"], cover_photo_id: "photo-4", cover_box: [], hidden: true },
+    { cluster_key: "person_far", face_count: 2, photo_ids: ["photo-5"], cover_photo_id: "photo-5", cover_box: [], hidden: false },
+  ];
+  const faceRecords = [
+    { photo_id: "photo-1", faces: [{ cluster_key: "person_close", embedding: probeEmbedding(0, 0.6) }] },
+    { photo_id: "photo-2", faces: [{ cluster_key: "person_close", embedding: probeEmbedding(0, 0.9) }] },
+    { photo_id: "photo-3", faces: [{ cluster_key: "person_single", embedding: probeEmbedding(0, 0.7) }] },
+    { photo_id: "photo-4", faces: [{ cluster_key: "person_admin_hidden", embedding: probeEmbedding(0, 0.99) }] },
+    { photo_id: "photo-5", faces: [{ cluster_key: "person_far", embedding: probeEmbedding(1) }] },
+  ];
+  const result = await matchSelfieClusters(
+    fakeBase44([], clusters, [], faceRecords),
+    { id: "participant-1", claimed_cluster_keys: ["person_single"] },
+    probeEmbedding(0),
+    listFetcher(5),
+  );
+
+  assert.deepEqual(result.suggestions.map(({ clusterKey }) => clusterKey), ["person_close", "person_single"]);
+  assert.deepEqual(result.suggestions.map(({ similarity }) => similarity), [0.9, 0.7]);
+  assert.deepEqual(result.suggestions.map(({ strength }) => strength), ["strong", "strong"]);
+  assert.deepEqual(result.suggestions.map(({ claimed }) => claimed), [false, true]);
+  assert.equal(result.suggestions[0]?.photoCount, 2);
+  assert.ok(result.suggestions[0]?.coverThumbnailUrl);
+});
+
+test("selfie match drops clusters whose photos left the folder and rejects malformed probes", async () => {
+  const { matchSelfieClusters } = await import(serviceModuleUrl) as ServiceModule;
+  const clusters = [
+    { cluster_key: "person_gone", face_count: 2, photo_ids: ["gone-photo"], cover_photo_id: "gone-photo", cover_box: [], hidden: false },
+  ];
+  const faceRecords = [
+    { photo_id: "gone-photo", faces: [{ cluster_key: "person_gone", embedding: probeEmbedding(0, 0.9) }] },
+  ];
+  const result = await matchSelfieClusters(
+    fakeBase44([], clusters, [], faceRecords),
+    { id: "participant-1", claimed_cluster_keys: [] },
+    probeEmbedding(0),
+    listFetcher(5),
+  );
+  assert.deepEqual(result.suggestions, []);
+
+  await assert.rejects(
+    matchSelfieClusters(fakeBase44([], clusters, [], faceRecords), { id: "participant-1" }, [0.5, 0.5], listFetcher(5)),
+    /invalid/i,
+  );
 });
 
 test("claiming validates the face group and unclaiming works without one", async () => {

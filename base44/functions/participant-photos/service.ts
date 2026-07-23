@@ -14,6 +14,7 @@ import {
   type DrivePhoto,
 } from "./drive.ts";
 import { orderPeopleClusters } from "./people-order.ts";
+import { matchProbeToClusters, normalizeProbe, type ProbeFace, type ProbeMatch } from "./selfie-match.ts";
 
 const defaultPageSize = 24;
 // 240 = 10 pages of 24, the client's restore cap after a refresh mid-scroll.
@@ -202,6 +203,57 @@ export async function listPeopleClusters(
   return { people, claimedClusterKeys: claimedKeys };
 }
 
+export interface SelfieSuggestion extends PersonCluster {
+  similarity: number;
+  strength: ProbeMatch["strength"];
+}
+
+export async function matchSelfieClusters(
+  base44: any,
+  participant: any,
+  embedding: unknown,
+  fetcher: typeof fetch = fetch,
+): Promise<{ suggestions: SelfieSuggestion[] }> {
+  const probe = normalizeProbe(embedding);
+  if (!probe) throw new Error("Selfie is invalid");
+  const [photos, clusters, records] = await Promise.all([
+    listDrivePhotos(await driveAccessToken(base44), fetcher),
+    loadFaceClusters(base44),
+    loadFaceIndexRecords(base44),
+  ]);
+  // Admin-hidden groups stay out, but single-face groups stay in: a selfie
+  // match is the only way a participant can discover a singleton of themselves.
+  const visibleByKey = new Map<string, any>(
+    clusters.filter((cluster: any) => cluster.hidden !== true).map((cluster: any) => [cluster.cluster_key, cluster]),
+  );
+  const faces: ProbeFace[] = records.flatMap((record: any) =>
+    (record.faces ?? [])
+      .filter((face: any) => visibleByKey.has(face.cluster_key) && Array.isArray(face.embedding))
+      .map((face: any) => ({ clusterKey: face.cluster_key, embedding: face.embedding }))
+  );
+  const availableIds = new Set(photos.map(({ id }) => id));
+  const photoById = new Map(photos.map((photo) => [photo.id, photo]));
+  const claimed = new Set(claimedClusterKeys(participant));
+  const suggestions = matchProbeToClusters(probe, faces)
+    .map((match) => {
+      const cluster = visibleByKey.get(match.clusterKey);
+      const cover = photoById.get(cluster.cover_photo_id);
+      return {
+        clusterKey: String(cluster.cluster_key ?? ""),
+        faceCount: cluster.face_count ?? 0,
+        photoCount: (cluster.photo_ids ?? []).filter((photoId: string) => availableIds.has(photoId)).length,
+        coverThumbnailUrl: cover?.thumbnailUrl ?? "",
+        coverBox: Array.isArray(cluster.cover_box) ? cluster.cover_box : [],
+        coverAspect: cover && cover.height > 0 ? cover.width / cover.height : 1.5,
+        claimed: claimed.has(cluster.cluster_key),
+        similarity: match.similarity,
+        strength: match.strength,
+      };
+    })
+    .filter((suggestion) => suggestion.photoCount > 0 && suggestion.coverThumbnailUrl);
+  return { suggestions };
+}
+
 const maximumClaimedClusters = 25;
 
 export async function claimFaceCluster(
@@ -249,6 +301,12 @@ async function loadFaceClusters(base44: any): Promise<any[]> {
   // The face index is optional: before the first indexing run (or in tests)
   // the FaceCluster entity may be absent, which simply means no matches.
   const entity = base44.asServiceRole.entities.FaceCluster;
+  if (!entity) return [];
+  return await entity.filter({}, undefined, 2000);
+}
+
+async function loadFaceIndexRecords(base44: any): Promise<any[]> {
+  const entity = base44.asServiceRole.entities.PhotoFaceIndex;
   if (!entity) return [];
   return await entity.filter({}, undefined, 2000);
 }
