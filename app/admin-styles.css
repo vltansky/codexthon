@@ -672,3 +672,17 @@
 .admin-shell .merge-pair .face-tile-image { width: 84px; }
 .admin-shell .merge-pair-similarity { min-width: 84px; font-size: 0.85rem; opacity: 0.8; }
 .admin-shell .merge-pair-actions { display: flex; gap: 8px; margin-left: auto; }
+.admin-shell .merge-pair-actions button {
+  border: 1px solid var(--admin-line);
+  border-radius: 999px;
+  padding: 9px 16px;
+  background: transparent;
+  color: var(--admin-ink);
+  font-size: 0.85rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.admin-shell .merge-pair-actions button:hover:not(:disabled) { border-color: var(--admin-signal); color: #fff; }
+.admin-shell .merge-pair-actions button.primary { border-color: var(--admin-signal); background: var(--admin-signal); color: #07101d; }
+.admin-shell .merge-pair-actions button.primary:hover:not(:disabled) { background: #ffb077; }
+.admin-shell .merge-pair-actions button:disabled { opacity: 0.55; cursor: wait; }
