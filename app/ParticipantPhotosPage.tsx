@@ -42,6 +42,7 @@ export function ParticipantPhotosPage({ view, pages, clusterKey = "", accessToke
   const loadedPagesRef = useRef(0);
   const loadingMoreRef = useRef(false);
   const loadingPageRef = useRef(false);
+  const loadMoreFailedRef = useRef(false);
   const photosRef = useRef<ParticipantPhoto[]>([]);
   const restoredScrollRef = useRef(false);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
@@ -112,6 +113,7 @@ export function ParticipantPhotosPage({ view, pages, clusterKey = "", accessToke
         savedAt: Date.now(),
       });
       setFolderLink(response.photosFolderLink ?? "");
+      loadMoreFailedRef.current = false;
       const queue = saveQueueRef.current;
       queue.lastSaved = response.selectedPhotoIds;
       // A save in flight means the local selection is newer than this listing.
@@ -163,8 +165,12 @@ export function ParticipantPhotosPage({ view, pages, clusterKey = "", accessToke
       const queue = saveQueueRef.current;
       queue.lastSaved = response.selectedPhotoIds;
       if (!queue.inflight && !queue.pending) setSelectedPhotoIds(response.selectedPhotoIds);
+      loadMoreFailedRef.current = false;
     } catch {
-      if (loadVersion === loadVersionRef.current) setError("Refresh the gallery or open the Drive folder directly.");
+      if (loadVersion === loadVersionRef.current) {
+        loadMoreFailedRef.current = true;
+        setError("Refresh the gallery or open the Drive folder directly.");
+      }
     } finally {
       loadingMoreRef.current = false;
       setLoadingMore(false);
@@ -200,6 +206,10 @@ export function ParticipantPhotosPage({ view, pages, clusterKey = "", accessToke
     const sentinel = sentinelRef.current;
     if (!sentinel) return;
     const observer = new IntersectionObserver((entries) => {
+      // After a failed append the observer stops auto-firing; otherwise the
+      // re-arm below would retry a dead backend once a second. The button
+      // remains as the explicit retry path.
+      if (loadMoreFailedRef.current) return;
       if (entries.some((entry) => entry.isIntersecting)) void loadMore();
     }, { rootMargin: "1200px 0px" });
     observer.observe(sentinel);
@@ -528,7 +538,15 @@ export function ParticipantPhotosPage({ view, pages, clusterKey = "", accessToke
           </span>
           {!reachedEnd ? (
             <div ref={sentinelRef}>
-              <button className="photos-load-more" type="button" onClick={() => void loadMore()} disabled={loadingMore}>
+              <button
+                className="photos-load-more"
+                type="button"
+                onClick={() => {
+                  loadMoreFailedRef.current = false;
+                  void loadMore();
+                }}
+                disabled={loadingMore}
+              >
                 {loadingMore ? "Loading more photos…" : "Load more photos"}
               </button>
             </div>
