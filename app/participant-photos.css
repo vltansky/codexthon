@@ -66,7 +66,6 @@
    and flex-grow proportional to aspect ratio fills each row edge to edge. */
 .photos-grid { display: flex; flex-wrap: wrap; gap: 10px; }
 .photos-grid::after { content: ""; flex-grow: 1000000; flex-basis: 0; }
-.photos-grid[aria-busy="true"] { opacity: .55; transition: opacity 160ms ease; }
 .participant-photo { position: relative; min-width: 0; flex-grow: calc(var(--photo-aspect) * 100); flex-basis: calc(var(--photo-aspect) * 260px); }
 .participant-photo button { position: relative; display: block; width: 100%; aspect-ratio: var(--photo-aspect); overflow: hidden; border: 0; padding: 0; background: #171a1f; color: #fff; text-align: left; isolation: isolate; }
 .participant-photo button::after { position: absolute; inset: 0; background: linear-gradient(180deg, transparent 55%, rgba(0, 0, 0, .82)); content: ""; pointer-events: none; }

@@ -7,11 +7,16 @@ import { participantAnalytics } from "./participantAnalytics";
 import type { ParticipantPeopleData, ParticipantPhoto, ParticipantPhotosPageData } from "./types";
 import { unwrapBase44FunctionResponse } from "../src/base44-response";
 import { appendPhotos, clampRestoreDepth, photosPagePath, photosPageSize, toggleSelectedPhotoId, type PhotosView } from "../src/photo-gallery";
-import { readGalleryCache, writeGalleryCache } from "./photoGalleryCache";
+import { clearGalleryCache, readGalleryCache, writeGalleryCache } from "./photoGalleryCache";
 import { photoSelectionTarget } from "../src/participant-analytics";
 import { ParticipantPeopleGrid } from "./ParticipantPeopleGrid";
 import { SelfieFinder } from "./SelfieFinder";
 import "./participant-photos.css";
+
+// Each list call relists the whole Drive folder server-side, so a bigger
+// slice costs the backend nothing extra; 4 pages per append means fewer
+// round trips while scrolling.
+const loadMoreChunkPages = 4;
 
 interface ParticipantPhotosPageProps {
   view: PhotosView;
@@ -140,7 +145,10 @@ export function ParticipantPhotosPage({ view, pages, clusterKey = "", accessToke
           ...(accessToken ? { token: accessToken } : {}),
           action: "list",
           view,
-          page: loadedPagesRef.current + 1,
+          // Chunked paging can overlap already-loaded photos when the current
+          // depth is not a chunk multiple; appendPhotos dedupes the overlap.
+          page: Math.floor(loadedPagesRef.current / loadMoreChunkPages) + 1,
+          pageSize: loadMoreChunkPages * photosPageSize,
           ...(view === "person" ? { clusterKey } : {}),
         }),
       );
@@ -153,12 +161,12 @@ export function ParticipantPhotosPage({ view, pages, clusterKey = "", accessToke
       setPhotos(nextPhotos);
       photosRef.current = nextPhotos;
       setReachedEnd(reachedLastPage);
-      loadedPagesRef.current = response.page;
-      replacePath(photosPagePath(view, response.page, clusterKey));
+      loadedPagesRef.current = response.page * loadMoreChunkPages;
+      replacePath(photosPagePath(view, loadedPagesRef.current, clusterKey));
       writeGalleryCache(galleryCacheKey(view, clusterKey), {
         data: response,
         photos: nextPhotos,
-        loadedPages: response.page,
+        loadedPages: loadedPagesRef.current,
         reachedEnd: reachedLastPage,
         savedAt: Date.now(),
       });
@@ -198,11 +206,44 @@ export function ParticipantPhotosPage({ view, pages, clusterKey = "", accessToke
     }
   }
 
+  async function refreshMyPhotos() {
+    // The people view has no photo listing of its own, but a claim changes
+    // what "My photos" holds; refetch it in the background so the tab count
+    // updates in place and the mine cache is warm before navigating there.
+    const loadVersion = loadVersionRef.current;
+    try {
+      const response = unwrapBase44FunctionResponse<ParticipantPhotosPageData>(
+        await base44.functions.invoke("participant-photos", {
+          ...(accessToken ? { token: accessToken } : {}),
+          action: "list",
+          view: "mine",
+          page: 1,
+          pageSize: photosPageSize,
+        }),
+      );
+      if (loadVersion !== loadVersionRef.current) return;
+      setData(response);
+      setFolderLink(response.photosFolderLink ?? "");
+      writeGalleryCache(galleryCacheKey("mine", ""), {
+        data: response,
+        photos: response.photos,
+        loadedPages: 1,
+        reachedEnd: response.page >= response.pageCount,
+        savedAt: Date.now(),
+      });
+      const queue = saveQueueRef.current;
+      queue.lastSaved = response.selectedPhotoIds;
+      if (!queue.inflight && !queue.pending) setSelectedPhotoIds(response.selectedPhotoIds);
+    } catch {
+      // The cleared cache already guarantees a fresh fetch on the next visit.
+    }
+  }
+
   useEffect(() => {
-    // The sentinel is a DOM node, so observing it needs an effect. The large
-    // margin preloads the next page well ahead of the viewport because each
-    // page fetch relists the Drive folder server-side (~1s); the visible
-    // button covers keyboard users.
+    // The sentinel is a DOM node, so observing it needs an effect. The margin
+    // covers a few seconds of scrolling: each fetch relists the Drive folder
+    // server-side (~1-2s), so loading must start well before the viewport
+    // gets there. The visible button covers keyboard users.
     const sentinel = sentinelRef.current;
     if (!sentinel) return;
     const observer = new IntersectionObserver((entries) => {
@@ -211,7 +252,7 @@ export function ParticipantPhotosPage({ view, pages, clusterKey = "", accessToke
       // remains as the explicit retry path.
       if (loadMoreFailedRef.current) return;
       if (entries.some((entry) => entry.isIntersecting)) void loadMore();
-    }, { rootMargin: "1200px 0px" });
+    }, { rootMargin: "3000px 0px" });
     observer.observe(sentinel);
     return () => observer.disconnect();
     // loadingMore re-arms the observer after each append: re-observing fires
@@ -277,6 +318,9 @@ export function ParticipantPhotosPage({ view, pages, clusterKey = "", accessToke
         }),
       );
       queue.lastSaved = response.selectedPhotoIds;
+      // Picks made on other views change the "mine" listing server-side; drop
+      // its cache so My photos refetches instead of painting a stale grid.
+      if (view !== "mine") clearGalleryCache(galleryCacheKey("mine", ""));
       participantAnalytics.actionCompleted({
         area: "photos",
         action: "selection_saved",
@@ -337,7 +381,10 @@ export function ParticipantPhotosPage({ view, pages, clusterKey = "", accessToke
       });
       // Matched photo ids changed server-side; refresh the current listing at
       // the depth already on screen so the scroll position stays meaningful.
-      if (view !== "people") void loadPhotos(clampRestoreDepth(Math.max(1, loadedPagesRef.current)));
+      // The "mine" cache is stale either way — drop it so My photos refetches.
+      if (view !== "mine") clearGalleryCache(galleryCacheKey("mine", ""));
+      if (view === "people") void refreshMyPhotos();
+      else void loadPhotos(clampRestoreDepth(Math.max(1, loadedPagesRef.current)));
     } catch (caught) {
       console.error("participant-photos: updating the face claim failed", caught);
       participantAnalytics.actionFailed({ area: "photos", action: "face_claim", errorCategory: "service_unavailable", view });
