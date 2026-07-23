@@ -12,5 +12,7 @@
 ## Architecture decisions
 
 - Record cross-cutting, security-sensitive, or hard-to-reverse repository decisions in `adr/`.
+- Prefer ADR-first: when a task settles such a decision, draft the ADR before or alongside the implementation, not as an afterthought — it is part of the change, not follow-up documentation.
+- Before finishing a feature, check whether it settled a decision that belongs in `adr/`; shipping one without its ADR is an incomplete change.
 - Keep session notes, temporary exploration, event counts, and deployment status out of ADRs.
 - Merged ADRs are immutable; supersede a decision with a new slug-only ADR.
