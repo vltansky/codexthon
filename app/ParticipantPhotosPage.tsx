@@ -7,6 +7,7 @@ import { participantAnalytics } from "./participantAnalytics";
 import type { ParticipantPeopleData, ParticipantPhoto, ParticipantPhotosPageData } from "./types";
 import { unwrapBase44FunctionResponse } from "../src/base44-response";
 import { appendPhotos, clampRestoreDepth, photosPagePath, photosPageSize, toggleSelectedPhotoId, type PhotosView } from "../src/photo-gallery";
+import { readGalleryCache, writeGalleryCache } from "./photoGalleryCache";
 import { photoSelectionTarget } from "../src/participant-analytics";
 import { ParticipantPeopleGrid } from "./ParticipantPeopleGrid";
 import "./participant-photos.css";
@@ -39,6 +40,8 @@ export function ParticipantPhotosPage({ view, pages, clusterKey = "", accessToke
   const loadVersionRef = useRef(0);
   const loadedPagesRef = useRef(0);
   const loadingMoreRef = useRef(false);
+  const loadingPageRef = useRef(false);
+  const photosRef = useRef<ParticipantPhoto[]>([]);
   const restoredScrollRef = useRef(false);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
@@ -51,6 +54,7 @@ export function ParticipantPhotosPage({ view, pages, clusterKey = "", accessToke
       const previewData = previewPageData(view, pages);
       setData(previewData);
       setPhotos(previewData.photos);
+      photosRef.current = previewData.photos;
       setReachedEnd(true);
       setPeopleData(previewPeopleData);
       setSelectedPhotoIds(previewSelectedIds);
@@ -60,13 +64,26 @@ export function ParticipantPhotosPage({ view, pages, clusterKey = "", accessToke
       void loadPeople();
       return;
     }
-    void loadPhotos(clampRestoreDepth(pages));
+    // Stale-while-revalidate: paint the cached grid instantly (refresh or tab
+    // return), then refetch at the same depth to pick up new uploads.
+    const cached = readGalleryCache(galleryCacheKey(view, clusterKey));
+    if (cached) {
+      setData(cached.data);
+      setPhotos(cached.photos);
+      photosRef.current = cached.photos;
+      setReachedEnd(cached.reachedEnd);
+      loadedPagesRef.current = cached.loadedPages;
+      const queue = saveQueueRef.current;
+      if (!queue.inflight && !queue.pending && queue.lastSaved.length === 0) setSelectedPhotoIds(cached.data.selectedPhotoIds);
+    }
+    void loadPhotos(clampRestoreDepth(Math.max(pages, cached?.loadedPages ?? 1)));
   }, [view, clusterKey, preview]);
 
   async function loadPhotos(depth: number) {
     const loadVersion = ++loadVersionRef.current;
     setError("");
     setLoadingPage(true);
+    loadingPageRef.current = true;
     try {
       const response = unwrapBase44FunctionResponse<ParticipantPhotosPageData>(
         await base44.functions.invoke("participant-photos", {
@@ -79,11 +96,20 @@ export function ParticipantPhotosPage({ view, pages, clusterKey = "", accessToke
         }),
       );
       if (loadVersion !== loadVersionRef.current) return;
+      const reachedLastPage = response.page >= response.pageCount;
       setData(response);
       setPhotos(response.photos);
-      setReachedEnd(response.page >= response.pageCount);
+      photosRef.current = response.photos;
+      setReachedEnd(reachedLastPage);
       loadedPagesRef.current = Math.max(1, Math.min(depth, Math.ceil(response.totalCount / photosPageSize)));
       replacePath(photosPagePath(view, loadedPagesRef.current, clusterKey));
+      writeGalleryCache(galleryCacheKey(view, clusterKey), {
+        data: response,
+        photos: response.photos,
+        loadedPages: loadedPagesRef.current,
+        reachedEnd: reachedLastPage,
+        savedAt: Date.now(),
+      });
       setFolderLink(response.photosFolderLink ?? "");
       const queue = saveQueueRef.current;
       queue.lastSaved = response.selectedPhotoIds;
@@ -93,12 +119,15 @@ export function ParticipantPhotosPage({ view, pages, clusterKey = "", accessToke
       if (loadVersion !== loadVersionRef.current) return;
       setError("Refresh the gallery or open the Drive folder directly.");
     } finally {
-      if (loadVersion === loadVersionRef.current) setLoadingPage(false);
+      if (loadVersion === loadVersionRef.current) {
+        setLoadingPage(false);
+        loadingPageRef.current = false;
+      }
     }
   }
 
   async function loadMore() {
-    if (loadingMoreRef.current || loadingPage || reachedEnd) return;
+    if (loadingMoreRef.current || loadingPageRef.current || reachedEnd) return;
     loadingMoreRef.current = true;
     setLoadingMore(true);
     const loadVersion = loadVersionRef.current;
@@ -113,13 +142,23 @@ export function ParticipantPhotosPage({ view, pages, clusterKey = "", accessToke
         }),
       );
       if (loadVersion !== loadVersionRef.current) return;
-      setData(response);
-      setPhotos((current) => appendPhotos(current, response.photos));
       // The server clamps past-the-end pages, so trusting response.page keeps
       // the depth honest when photos were removed between fetches.
-      setReachedEnd(response.page >= response.pageCount);
+      const reachedLastPage = response.page >= response.pageCount;
+      const nextPhotos = appendPhotos(photosRef.current, response.photos);
+      setData(response);
+      setPhotos(nextPhotos);
+      photosRef.current = nextPhotos;
+      setReachedEnd(reachedLastPage);
       loadedPagesRef.current = response.page;
       replacePath(photosPagePath(view, response.page, clusterKey));
+      writeGalleryCache(galleryCacheKey(view, clusterKey), {
+        data: response,
+        photos: nextPhotos,
+        loadedPages: response.page,
+        reachedEnd: reachedLastPage,
+        savedAt: Date.now(),
+      });
       const queue = saveQueueRef.current;
       queue.lastSaved = response.selectedPhotoIds;
       if (!queue.inflight && !queue.pending) setSelectedPhotoIds(response.selectedPhotoIds);
@@ -153,13 +192,15 @@ export function ParticipantPhotosPage({ view, pages, clusterKey = "", accessToke
   }
 
   useEffect(() => {
-    // The sentinel is a DOM node, so observing it needs an effect. It fires
-    // ahead of the viewport edge; the visible button covers keyboard users.
+    // The sentinel is a DOM node, so observing it needs an effect. The large
+    // margin preloads the next page well ahead of the viewport because each
+    // page fetch relists the Drive folder server-side (~1s); the visible
+    // button covers keyboard users.
     const sentinel = sentinelRef.current;
     if (!sentinel) return;
     const observer = new IntersectionObserver((entries) => {
       if (entries.some((entry) => entry.isIntersecting)) void loadMore();
-    }, { rootMargin: "600px 0px" });
+    }, { rootMargin: "1200px 0px" });
     observer.observe(sentinel);
     return () => observer.disconnect();
   }, [reachedEnd, loadingPage, view, clusterKey, preview]);
@@ -185,17 +226,17 @@ export function ParticipantPhotosPage({ view, pages, clusterKey = "", accessToke
   }, [view, clusterKey, preview]);
 
   useEffect(() => {
-    // Restores scroll once per full page load, after the refetched grid has
-    // committed. Tile heights come from aspect-ratio metadata, so scrollY is
-    // stable before images finish loading. In-app navigation never restores —
-    // the ref stays set, matching the browser's default SPA behavior.
+    // Restores scroll once per full page load, as soon as a grid (cached or
+    // fetched) has committed. Tile heights come from aspect-ratio metadata, so
+    // scrollY is stable before images finish loading. In-app navigation never
+    // restores — the ref stays set, matching default SPA behavior.
     if (preview || view === "people" || restoredScrollRef.current) return;
-    if (loadingPage || photos.length === 0) return;
+    if (photos.length === 0) return;
     restoredScrollRef.current = true;
     const stored = Number(sessionStorage.getItem(scrollStorageKey(view, clusterKey)) ?? "");
     if (!Number.isFinite(stored) || stored <= 0) return;
     requestAnimationFrame(() => window.scrollTo(0, stored));
-  }, [preview, view, clusterKey, loadingPage, photos]);
+  }, [preview, view, clusterKey, photos]);
 
   function togglePhoto(photoId: string) {
     const nextSelection = toggleSelectedPhotoId(selectedPhotoIds, photoId);
@@ -495,6 +536,10 @@ export function ParticipantPhotosPage({ view, pages, clusterKey = "", accessToke
 
 function scrollStorageKey(view: PhotosView, clusterKey: string): string {
   return `photos-scroll:${photosPagePath(view, 1, clusterKey)}`;
+}
+
+function galleryCacheKey(view: PhotosView, clusterKey: string): string {
+  return `photos-cache:${photosPagePath(view, 1, clusterKey)}`;
 }
 
 function headingForView(view: PhotosView): string {
