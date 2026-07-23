@@ -1,4 +1,5 @@
-import { listIndexablePhotos, type IndexablePhoto } from "./drive.ts";
+import { fetchThumbnail, listIndexablePhotos, type IndexablePhoto } from "./drive.ts";
+import { faceSharpness } from "./sharpness.ts";
 
 // Threshold calibrated for buffalo_s embeddings (POC on 194 real event photos:
 // same-person cross-photo cosine ~0.71, strangers well below 0.5).
@@ -137,6 +138,46 @@ export async function listClusters(base44: any) {
         };
       }),
   };
+}
+
+// Backfills sharpness for faces indexed before the browser reported it (from
+// Drive thumbnail crops), then re-picks every cover and centroid in place.
+// Cluster keys never change, so participant claims survive — unlike a reset.
+export async function recomputeClusters(
+  base44: any,
+  fetcher: typeof fetch = fetch,
+): Promise<{ analyzedPhotos: number; failedPhotos: number; clusterCount: number }> {
+  // jpeg-js loads lazily: node-based tests import this module without npm: support.
+  const { default: jpeg } = await import("npm:jpeg-js@0.4.4");
+  const [photos, records] = await Promise.all([
+    listIndexablePhotos(await driveAccessToken(base44), fetcher),
+    listIndexRecords(base44),
+  ]);
+  const photoById = new Map(photos.map((photo) => [photo.id, photo]));
+  let analyzedPhotos = 0;
+  let failedPhotos = 0;
+  for (const record of records) {
+    const faces = record.faces ?? [];
+    if (faces.length === 0 || faces.every((face) => typeof face.sharpness === "number")) continue;
+    const photo = photoById.get(record.photo_id);
+    if (!photo || !record.id) continue;
+    try {
+      const bytes = await fetchThumbnail(photo.thumbnailUrl, fetcher);
+      if (!bytes) throw new Error("Thumbnail unavailable");
+      const image = jpeg.decode(bytes, { useTArray: true, maxMemoryUsageInMB: 128 });
+      for (const face of faces) face.sharpness = round(faceSharpness(image, face.box), 100);
+      await base44.asServiceRole.entities.PhotoFaceIndex.update(record.id, { faces });
+      analyzedPhotos += 1;
+    } catch (error) {
+      console.error(`face-index: sharpness backfill failed for ${record.photo_name || record.photo_id}: ${error}`);
+      failedPhotos += 1;
+    }
+  }
+  const touchedClusterKeys = new Set(
+    records.flatMap((record) => (record.faces ?? []).map((face) => face.cluster_key)).filter(Boolean),
+  );
+  const clusterCount = await upsertClusters(base44, records, touchedClusterKeys);
+  return { analyzedPhotos, failedPhotos, clusterCount };
 }
 
 export async function resetIndex(base44: any): Promise<{ deletedRecords: number; deletedClusters: number }> {

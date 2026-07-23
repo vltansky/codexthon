@@ -1,6 +1,6 @@
 import { createClientFromRequest } from "npm:@base44/sdk";
 
-import { indexStatus, ingestPhoto, listClusters, pendingPhotos, proxyThumbnail, resetIndex } from "./indexer.ts";
+import { indexStatus, ingestPhoto, listClusters, pendingPhotos, proxyThumbnail, recomputeClusters, resetIndex } from "./indexer.ts";
 
 const securityHeaders = { "Cache-Control": "no-store", "Referrer-Policy": "no-referrer" };
 
@@ -24,6 +24,9 @@ Deno.serve(async (request) => {
     }
     if (body.action === "clusters") {
       return Response.json(await listClusters(base44), { headers: securityHeaders });
+    }
+    if (body.action === "recompute") {
+      return Response.json(await recomputeClusters(base44), { headers: securityHeaders });
     }
     if (body.action === "reset") {
       return Response.json(await resetIndex(base44), { headers: securityHeaders });

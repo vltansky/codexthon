@@ -37,6 +37,7 @@ export function AdminFacesPage({ user, onNavigate }: { user: AppUser; onNavigate
   const [status, setStatus] = useState<FaceIndexStatus | null>(null);
   const [clusters, setClusters] = useState<ClusterSummary[]>([]);
   const [indexing, setIndexing] = useState(false);
+  const [refreshingCovers, setRefreshingCovers] = useState(false);
   const [notice, setNotice] = useState("Loading face index status…");
   const stopRef = useRef(false);
 
@@ -106,6 +107,20 @@ export function AdminFacesPage({ user, onNavigate }: { user: AppUser; onNavigate
     }
   }
 
+  async function refreshCovers() {
+    setRefreshingCovers(true);
+    setNotice("Refreshing group covers and sorting (analyzing photo sharpness on the server)…");
+    try {
+      const result = await invokeFaceIndex<{ analyzedPhotos: number; failedPhotos: number; clusterCount: number }>({ action: "recompute" });
+      const failed = result.failedPhotos ? `; ${result.failedPhotos} photo${result.failedPhotos === 1 ? "" : "s"} could not be analyzed` : "";
+      await refresh(`Refreshed covers and sorting for ${result.clusterCount} groups (${result.analyzedPhotos} photos analyzed${failed})`);
+    } catch (caught) {
+      setNotice(caught instanceof Error ? caught.message : "Could not refresh the group covers");
+    } finally {
+      setRefreshingCovers(false);
+    }
+  }
+
   async function resetIndex() {
     if (!window.confirm("Delete the whole face index? Photos will need to be indexed again.")) return;
     setNotice("Resetting face index…");
@@ -139,7 +154,10 @@ export function AdminFacesPage({ user, onNavigate }: { user: AppUser; onNavigate
               Index photos
             </button>
           )}
-          <button type="button" disabled={indexing || !status || status.indexedPhotos === 0} onClick={() => void resetIndex()}>
+          <button type="button" disabled={indexing || refreshingCovers || !status || status.indexedPhotos === 0} onClick={() => void refreshCovers()}>
+            {refreshingCovers ? "Refreshing covers…" : "Refresh group covers & sorting"}
+          </button>
+          <button type="button" disabled={indexing || refreshingCovers || !status || status.indexedPhotos === 0} onClick={() => void resetIndex()}>
             Reset index
           </button>
         </div>
