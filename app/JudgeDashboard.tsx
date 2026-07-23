@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { ArrowRight } from "lucide-react";
 
 import { base44 } from "./base44Client";
+import { internalLinkHandler } from "./navigation";
 import type { JudgePortalData } from "./types";
 import { unwrapBase44FunctionResponse } from "../src/base44-response";
+import { photosPagePath } from "../src/photo-gallery";
 
 export function JudgeDashboard({ fallbackError, accessToken, onExit }: { fallbackError?: string; accessToken?: string; onExit?: () => void }) {
   const [data, setData] = useState<JudgePortalData | null>(null);
@@ -76,6 +79,11 @@ export function JudgeDashboard({ fallbackError, accessToken, onExit }: { fallbac
         <p className="eyebrow">Judge portal</p>
         <h1>Welcome, {firstName}.</h1>
         <p>{data.groups.length ? `You are judging in ${data.groups.length} panel${data.groups.length === 1 ? "" : "s"} tonight.` : "No judging panels are assigned to you yet. Check back after panels are published."}</p>
+        <div className="mentor-links">
+          <a href={photosPagePath("all")} onClick={internalLinkHandler(photosPagePath("all"))}>Browse event photos <ArrowRight size={14} aria-hidden="true" /></a>
+          <a href={photosPagePath("people")} onClick={internalLinkHandler(photosPagePath("people"))}>Find your face <ArrowRight size={14} aria-hidden="true" /></a>
+          <a href={photosPagePath("mine")} onClick={internalLinkHandler(photosPagePath("mine"))}>My photos <ArrowRight size={14} aria-hidden="true" /></a>
+        </div>
       </section>
 
       {data.groups.map((group) => (

@@ -74,7 +74,7 @@ export async function listParticipantPhotos(
   };
 }
 
-export type PhotoOwnerEntity = "Participant" | "Mentor";
+export type PhotoOwnerEntity = "Participant" | "Mentor" | "Judge";
 
 export async function saveParticipantPhotoSelection(
   base44: any,

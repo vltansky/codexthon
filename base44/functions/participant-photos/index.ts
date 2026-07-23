@@ -93,6 +93,12 @@ async function ownerFromAccessLink(base44: any, token: string): Promise<PhotoOwn
   if (mentors.length === 1 && mentor && (mentor.access_version || 1) === payload.version) {
     return { record: mentor, entityName: "Mentor" };
   }
+
+  const judges = await base44.asServiceRole.entities.Judge.filter({ access_key: payload.accessKey }, undefined, 2);
+  const judge = judges[0];
+  if (judges.length === 1 && judge && (judge.access_version || 1) === payload.version) {
+    return { record: judge, entityName: "Judge" };
+  }
   throw new Error("Access link is invalid");
 }
 
@@ -111,5 +117,11 @@ async function ownerFromAuthenticatedUser(base44: any): Promise<PhotoOwner> {
     typeof candidate.email === "string" && candidate.email.trim().toLowerCase() === email
   );
   if (mentor) return { record: mentor, entityName: "Mentor" };
+
+  const judges = await base44.asServiceRole.entities.Judge.list("display_name", 1000);
+  const judge = judges.find((candidate: any) =>
+    typeof candidate.email === "string" && candidate.email.trim().toLowerCase() === email
+  );
+  if (judge) return { record: judge, entityName: "Judge" };
   throw new Error("Participant access unavailable");
 }

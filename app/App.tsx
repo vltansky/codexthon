@@ -92,6 +92,7 @@ export function App() {
     }} />;
   }
   if (judgeToken) {
+    if (photosRoute) return <ParticipantPhotosPage accessToken={judgeToken} view={photosRoute.view} page={photosRoute.page} clusterKey={photosRoute.clusterKey} />;
     return <JudgeDashboard accessToken={judgeToken} onExit={() => {
       localStorage.removeItem(judgeSessionKey);
       sessionStorage.removeItem(judgeSessionKey);
