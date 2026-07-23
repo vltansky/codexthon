@@ -54,11 +54,11 @@ export function MentorDashboard({ fallbackError, accessToken, onExit }: { fallba
         <p className="eyebrow">Mentor portal</p>
         <h1>Welcome, {firstName}.</h1>
         <p>{data.teams.length ? `You are mentoring ${data.teams.length} team${data.teams.length === 1 ? "" : "s"} tonight.` : "No teams are assigned to you yet. Check back after assignments are published."}</p>
-        {!accessToken && <div className="mentor-links">
+        <div className="mentor-links">
           <a href={photosPagePath("all")} onClick={internalLinkHandler(photosPagePath("all"))}>Browse event photos <ArrowRight size={14} aria-hidden="true" /></a>
           <a href={photosPagePath("people")} onClick={internalLinkHandler(photosPagePath("people"))}>Find your face <ArrowRight size={14} aria-hidden="true" /></a>
           <a href={photosPagePath("mine")} onClick={internalLinkHandler(photosPagePath("mine"))}>My photos <ArrowRight size={14} aria-hidden="true" /></a>
-        </div>}
+        </div>
       </section>
 
       <div className="mentor-teams-grid">

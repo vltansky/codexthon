@@ -31,7 +31,7 @@ Deno.serve(async (request) => {
     };
     const base44 = createClientFromRequest(request);
     const owner: PhotoOwner = body.token
-      ? { record: await participantFromAccessLink(base44, body.token), entityName: "Participant" }
+      ? await ownerFromAccessLink(base44, body.token)
       : await ownerFromAuthenticatedUser(base44);
 
     if (body.action === "save" || (body.action === undefined && body.selectedPhotoIds !== undefined)) {
@@ -68,23 +68,32 @@ Deno.serve(async (request) => {
   }
 });
 
-async function participantFromAccessLink(base44: any, token: string) {
+async function ownerFromAccessLink(base44: any, token: string): Promise<PhotoOwner> {
   if (token.length > 2048) throw new Error("Access link is invalid");
   const secret = Deno.env.get("ACCESS_LINK_SECRET");
   if (!secret) throw new Error("Access link is invalid");
   const payload = await verifyAccessToken(token, secret);
+
   const participants = await base44.asServiceRole.entities.Participant.filter({ access_key: payload.accessKey }, undefined, 2);
   const participant = participants[0];
   if (
-    participants.length !== 1 ||
-    !participant ||
-    participant.active === false ||
-    participant.access_enabled === false ||
-    participant.access_version !== payload.version
+    participants.length === 1 &&
+    participant &&
+    participant.active !== false &&
+    participant.access_enabled !== false &&
+    participant.access_version === payload.version
   ) {
-    throw new Error("Access link is invalid");
+    return { record: participant, entityName: "Participant" };
   }
-  return participant;
+
+  // Mentor invite links are signed with the same secret; the access key
+  // decides which record the token belongs to (mirrors mentor-data).
+  const mentors = await base44.asServiceRole.entities.Mentor.filter({ access_key: payload.accessKey }, undefined, 2);
+  const mentor = mentors[0];
+  if (mentors.length === 1 && mentor && (mentor.access_version || 1) === payload.version) {
+    return { record: mentor, entityName: "Mentor" };
+  }
+  throw new Error("Access link is invalid");
 }
 
 async function ownerFromAuthenticatedUser(base44: any): Promise<PhotoOwner> {
