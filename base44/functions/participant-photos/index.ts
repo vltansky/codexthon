@@ -7,6 +7,7 @@ import {
   exportParticipantPhotosFolder,
   listParticipantPhotos,
   listPeopleClusters,
+  matchSelfieClusters,
   saveParticipantPhotoSelection,
   type PhotoOwnerEntity,
 } from "./service.ts";
@@ -28,6 +29,7 @@ Deno.serve(async (request) => {
       page?: unknown;
       pageSize?: unknown;
       clusterKey?: unknown;
+      embedding?: unknown;
     };
     const base44 = createClientFromRequest(request);
     const owner: PhotoOwner = body.token
@@ -49,6 +51,12 @@ Deno.serve(async (request) => {
     if (body.action === "claim" || body.action === "unclaim") {
       return Response.json(
         await claimFaceCluster(base44, owner.record, body.clusterKey, body.action === "claim", owner.entityName),
+        { headers: securityHeaders },
+      );
+    }
+    if (body.action === "match_selfie") {
+      return Response.json(
+        await matchSelfieClusters(base44, owner.record, body.embedding),
         { headers: securityHeaders },
       );
     }
