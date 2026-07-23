@@ -27,8 +27,9 @@ export type ParticipantCompletedAction =
   | "face_claimed"
   | "face_unclaimed"
   | "folder_opened"
-  | "selection_saved";
-export type ParticipantFailedAction = "copy" | "face_claim" | "folder_export" | "selection_save";
+  | "selection_saved"
+  | "selfie_matched";
+export type ParticipantFailedAction = "copy" | "face_claim" | "folder_export" | "selection_save" | "selfie_match";
 export type ParticipantErrorCategory = "clipboard_unavailable" | "service_unavailable";
 
 export type ParticipantPageViewInput =

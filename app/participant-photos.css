@@ -133,6 +133,16 @@
 
 .people-hint { max-width: 620px; margin: -8px 0 28px; color: #a8adb3; font-size: 14px; }
 
+.selfie-finder { margin: 0 0 28px; }
+.selfie-finder-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.selfie-finder-button { display: inline-flex; align-items: center; gap: 7px; border: 1px solid #f4f1e8; border-radius: 999px; padding: 10px 16px; background: transparent; color: #f4f1e8; font-size: 13px; font-weight: 700; transition: border-color 150ms ease, background 150ms ease, color 150ms ease; }
+.selfie-finder-button:hover:not(:disabled) { border-color: #78a7ff; background: #78a7ff; color: #05070a; }
+.selfie-finder-button:disabled { border-color: #3a3a3a; color: #6b7077; cursor: wait; }
+.selfie-finder-hint { color: #a8adb3; font-size: 12.5px; }
+.selfie-finder-empty { margin: 12px 0 0; color: #a8adb3; font-size: 13px; }
+.selfie-finder-results { margin: 22px 0 8px; }
+.selfie-finder-results h2 { margin: 0 0 12px; font-size: 16px; color: #f4f1e8; }
+
 .people-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 20px 14px; }
 .person-card { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 .person-card-face { position: relative; display: block; aspect-ratio: 1; overflow: hidden; border-radius: 14px; background-color: #171a1f; background-repeat: no-repeat; transition: transform 200ms cubic-bezier(.2, .8, .2, 1), filter 200ms ease; filter: saturate(.85); }

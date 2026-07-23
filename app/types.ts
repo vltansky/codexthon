@@ -69,6 +69,15 @@ export interface ParticipantPeopleData {
   claimedClusterKeys: string[];
 }
 
+export interface SelfieSuggestion extends PersonClusterSummary {
+  similarity: number;
+  strength: "strong" | "weak";
+}
+
+export interface SelfieMatchData {
+  suggestions: SelfieSuggestion[];
+}
+
 export interface MentorRecord {
   id: string;
   mentor_key: string;
